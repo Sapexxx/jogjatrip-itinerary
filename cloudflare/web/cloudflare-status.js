@@ -1,2 +1,21 @@
-// Cloudflare preview mode indicator; checkout is disabled until provider verification.
-(async()=>{try{const r=await fetch('/api/health',{cache:'no-store'}),data=await r.json();if(data.bookingEnabled)return;const el=document.createElement('div');el.setAttribute('role','status');el.style.cssText='position:sticky;top:0;z-index:9999;padding:10px 18px;background:#FFF0D4;border-bottom:1px solid #BA8B43;color:#603D13;text-align:center;font:600 13px/1.5 system-ui,sans-serif';el.textContent='Mode Pratinjau Cloudflare: katalog, itinerary dan quote tersedia. Checkout provider sengaja dinonaktifkan sampai verifikasi integrasi selesai.';document.body.prepend(el);document.addEventListener('click',ev=>{const btn=ev.target.closest?.('#bookBtn,#ibBook,#packageBookBtn');if(!btn)return;ev.preventDefault();ev.stopImmediatePropagation();alert('Checkout belum diaktifkan di Cloudflare. Verifikasi D1 dan token provider dahulu.')},true)}catch{/* UI remains usable; /api/health errors surface elsewhere. */}})();
+// Keep the checkout safety guard without displaying a permanent preview banner.
+// The backend remains the authority: BOOKING_ENABLED=false blocks booking APIs.
+(async () => {
+  try {
+    const response = await fetch('/api/health', { cache: 'no-store' });
+    if (!response.ok) return;
+    const health = await response.json();
+    if (health.bookingEnabled !== false) return;
+
+    document.addEventListener('click', (event) => {
+      const button = event.target.closest?.('#bookBtn, #ibBook, #packageBookBtn');
+      if (!button) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      alert('Checkout belum tersedia. Anda tetap dapat menjelajahi katalog, menyusun itinerary, dan memeriksa harga.');
+    }, true);
+  } catch {
+    // A health-check error does not prevent other UI actions.
+    // Booking is always authorized independently by the Worker backend.
+  }
+})();
