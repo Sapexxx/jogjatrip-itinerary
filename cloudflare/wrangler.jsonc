@@ -14,7 +14,7 @@
     {
       "binding": "DB",
       "database_name": "jogjatrip-db",
-      "database_id": "REPLACE_WITH_REAL_D1_DATABASE_ID",
+      "database_id": "7fa5e947-232d-4cb1-b856-4b194fe16a5b",
       "migrations_dir": "migrations"
     }
   ],
