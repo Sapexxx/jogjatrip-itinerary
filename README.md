@@ -1,143 +1,159 @@
-# JogjaTrip V5 — Integrated Itinerary, Semantic Recommendations & Bundling
+# JogjaTrip
+### Integrated Travel Itinerary · Smart Bundling · Semantic Interoperability
 
-## Konsep
+**Platform perencanaan perjalanan Yogyakarta yang menghubungkan layanan Hotel dan Wisata independen melalui REST API.** Pengguna dapat mencari layanan, mengatur jadwal perjalanan sendiri, menyusun itinerary harian, melihat estimasi biaya, dan memantau referensi reservasi yang bersumber dari provider.
 
-Aplikasi akademik Go 1.23 **stdlib-only** + HTML/CSS/JavaScript tanpa npm. JogjaTrip bukan website yang sekadar menyalin daftar destinasi. Itinerary dan paket perjalanan adalah data asli JogjaTrip, sedangkan Hotel (Cloudflare Workers) dan Wisata (Flask/Vercel) tetap menjadi **source of truth** untuk harga, kuota/kamar, booking, dan status komponen masing-masing.
+**Status proyek:** prototipe akademik *Interoperabilitas Lanjut* · **v5.3** · *pembayaran nyata belum tersedia*.
 
-**Fitur prioritas V5:**
+[**Panduan pengguna**](docs/USER_GUIDE.md) · [**Arsitektur**](docs/ARCHITECTURE.md) · [**API**](docs/API_REFERENCE.md) · [**Menjalankan & berkontribusi**](docs/DEVELOPMENT.md) · [**Deploy Cloudflare**](docs/DEPLOYMENT_CLOUDFLARE.md) · [**Status & batasan**](docs/PROJECT_STATUS.md)
 
-- Cari Hotel dan kamar dari API JogjaStay; tambahkan sebagai reservasi yang *belum dibooking* dalam itinerary.
-- Dari hotel terpilih, rekomendasikan Wisata dari API Wisata berdasarkan **wilayah administratif yang sama** (bukan klaim jarak terdekat).
-- Pilih satu atau beberapa destinasi, letakkan pada agenda harian, dan simpan itinerary **secara independen**.
-- Klik **Periksa harga & stok** untuk quote langsung dari setiap penyedia.
-- Checkout itinerary dengan **POST ke API provider** menggunakan kredensial partner **hanya dari server Go**; maksimal 12 komponen baru dalam satu checkout. Hasil memuat ID booking dan status asli dari provider.
-- Sinkronisasi status booking agenda (misalnya `DECLINED` dari Hotel). Perubahan jadwal agenda **tidak otomatis** melakukan reschedule booking provider.
-- Katalog paket unggulan 3H2M, 5H4M, 7H6M serta beberapa variasi tema/wilayah. Paket berisi rekomendasi berdasar katalog real, bukan stok/harga yang dibuat sendiri.
-- Paket curated berbasis JSON dan aturan diskon dari V3 tetap tersedia dengan jalur checkout paket tersendiri.
-- Kosakata OWL/SKOS (dokumentasi) dan pemetaan eksplisit wilayah di backend Go; tidak menginstal reasoner RDF.
-- Transportasi: **❌ Ditunda atas keputusan tim**. UI boleh mencantumkan 'Segera hadir', tetapi tidak ada kontrak maupun pemesanan transportasi.
+---
 
-## Menjalankan lewat Google Antigravity / Windows PowerShell
+## Mengapa JogjaTrip?
 
-1. Ekstrak ZIP. Buka folder **`JogjaTrip_V5`** (yang memiliki `go.mod` dan `main.go`) pada Google Antigravity.
-2. Pastikan Go 1.23+ terpasang (`go version`).
-3. Jalankan (alamat **base**, jangan tambahkan `/api/v1/hotels` ataupun `/api/v1/destinations`):
+JogjaTrip bukan sekadar direktori tempat wisata atau kumpulan tautan reservasi. Aplikasi ini berperan sebagai **aggregator/interoperability layer**, sedangkan setiap sistem penyedia tetap memiliki data dan proses bisnisnya sendiri.
+
+| Peran | Tanggung jawab | Sumber data |
+|---|---|---|
+| **JogjaTrip** | Paket, itinerary, waktu rencana pengguna, ringkasan pesanan dan status gabungan | Database JogjaTrip |
+| **JogjaStay Hotel** | Hotel, kamar, harga, ketersediaan, dan status reservasi hotel | [Hotel Service](https://github.com/FaridAzis/jogjastay-hotel-service) |
+| **Wisata Jogja** | Destinasi, tiket, harga, kuota, dan status pesanan wisata jika tersedia | [Wisata API](https://wisata-jogja-ten.vercel.app) |
+| **Transportasi** | Integrasi direncanakan, **belum aktif** | Belum ada kontrak API yang terverifikasi |
+
+### Fitur utama
+
+- **Eksplorasi Hotel dan Wisata** dari katalog masing-masing penyedia, dengan pilihan wilayah DIY.
+- **Pemesanan mandiri atau kombinasi layanan**: Hotel saja, Wisata saja, ataupun Hotel + Wisata.
+- **Itinerary Builder**: agenda beberapa hari, jadwal hotel/wisata dan aktivitas pribadi, serta pengecekan benturan waktu.
+- **Waktu fleksibel**: pengguna menentukan tanggal, jam mulai dan selesai. Jam ini adalah **preferensi itinerary**, bukan slot masuk yang dijamin oleh provider.
+- **Rekomendasi berbasis semantik**: penyetaraan wilayah “Sleman” dan “kabupaten-sleman”, bukan klaim lokasi yang paling dekat secara geografis.
+- **Smart Bundling**: contoh perjalanan bertema dan paket curated dengan perhitungan harga berdasarkan API ketika melakukan quote; diskon mengikuti aturan paket.
+- **Booking Management**: kode pesanan, nama layanan apabila katalog tersedia, tipe kamar/tiket, harga historis, jadwal, kode reservasi provider, dan sinkronisasi status.
+- **Toleransi kegagalan**: perbedaan status provider disimpan, dan kondisi parsial/unknown tidak dinyatakan sebagai transaksi berhasil sepenuhnya.
+
+> **Penting:** membuat itinerary, memperoleh *quote*, membuat reservasi, dan menyelesaikan pembayaran adalah empat kejadian yang berbeda. Jangan menyamakan “PAID” pada simulasi provider dengan bukti pembayaran uang nyata.
+
+## Arsitektur singkat
+
+```mermaid
+flowchart LR
+    U["Pengguna"] --> UI["JogjaTrip · Web UI"]
+    UI --> API["JogjaTrip · REST API"]
+    API <--> DB[("Data itinerary & pesanan")]
+    API --> SEM["Semantic mapping 5 wilayah DIY"]
+    SEM --> H["JogjaStay Hotel · Cloudflare"]
+    SEM --> W["Wisata Jogja · Vercel"]
+    H --> HD[("Data Hotel")]
+    W --> WD[("Data Wisata")]
+    T["Transport: belum terintegrasi"] -.-> API
+```
+
+**Prinsip sumber kebenaran:** Hotel dan Wisata mengendalikan reservasi masing-masing. JogjaTrip menyimpan rencana serta referensi dan melakukan sinkronisasi; perubahan agenda tidak otomatis menjadwalkan ulang reservasi provider.
+
+[Pelajari arsitektur, normalisasi wilayah, dan alur booking](docs/ARCHITECTURE.md).
+
+## Struktur repository
+
+```text
+jogjatrip-itinerary/
+├── README.md                    # Ringkasan dan navigasi proyek
+├── docs/                        # Panduan, API, arsitektur, deployment
+│   └── history/                 # Catatan versi dan hasil uji historis
+├── main.go                      # Backend Go asli (stdlib)
+├── integrated.go                # Itinerary dan rekomendasi Hotel–Wisata
+├── packages.go                  # Paket curated, quote, booking
+├── order_details.go             # Pengayaan rincian pesanan
+├── v2.go / provider.go          # Model dan adapter pendukung
+├── web/                         # Frontend HTML/CSS/JavaScript Go
+├── data/packages/               # Template paket curated pada branch pengembangan
+├── ontology/                    # Kosakata RDF/OWL/SKOS dan pemetaan wilayah
+├── db/supabase.sql              # Skema penyimpanan Go dengan Supabase
+└── cloudflare/                  # Target Workers + D1 (branch cloudflare-deploy)
+    ├── src/                     # Handler dan adapter JavaScript
+    ├── web/                     # Static assets
+    ├── migrations/              # Skema D1
+    ├── templates/               # Paket curated
+    └── tests/                   # Unit dan mock API tests
+```
+
+**Ada dua jalur runtime:** branch `main` mempertahankan aplikasi **Go 1.23**; branch `cloudflare-deploy` menambahkan adaptasi **Cloudflare Workers + D1** dalam folder `cloudflare/`. Tidak perlu menulis ulang atau menghapus Go hanya untuk menyiapkan Cloudflare. Lihat [perbedaan dan status aktual](docs/PROJECT_STATUS.md).
+
+## Memulai secara lokal
+
+### Menjalankan versi Go
+
+Prasyarat: **Go 1.23+**. Dari folder root repository:
 
 ```powershell
 $env:HOTEL_API_URL="https://jogjastay-hotel-service.jogjawisata.workers.dev"
 $env:WISATA_API_URL="https://wisata-jogja-ten.vercel.app"
-# Token ini harus didapat secara sah dari tim provider, jangan ditempel di chat/repository:
-$env:HOTEL_PARTNER_TOKEN="ISI_TOKEN_RAHASIA_ANDA"
-$env:WISATA_PARTNER_TOKEN="ISI_TOKEN_RAHASIA_ANDA"
 go run .
 ```
 
-4. Buka **http://localhost:8080**. Pilih **Itinerary** → pilih kamar hotel → pilih wisata rekomendasi → simpan → quote → checkout.
-5. Tanpa token partner, katalog dapat dibuka tetapi booking akan ditolak oleh backend. **Jangan memakai token contoh untuk transaksi nyata**.
-6. Untuk perintah validasi:
+Buka **http://localhost:8080**. Katalog dapat diakses selama API provider aktif; pembuatan booking memerlukan kredensial partner yang sah pada server. Jangan memasukkan token ke frontend atau repository.
 
-```bash
-gofmt -w *.go
+```powershell
 go vet ./...
-go test ./...
-node --check web/integrated.js
+go test -count=1 ./...
 ```
 
-> File `.env.example` tidak otomatis diproses oleh Go; gunakan environment variables OS atau pengaturan host.
+### Menjalankan versi Cloudflare
 
-## API V5
+Ambil branch `cloudflare-deploy`. Prasyarat: **Node.js** dan akun Cloudflare untuk D1/Workers.
 
-| Method | Endpoint | Persyaratan |
-|---|---|---|
-| GET | `/api/recommendations?hotelId=H01` | Publik; rekomendasi satu wilayah dari katalog Hotel dan Wisata |
-| POST | `/api/itineraries` | Buat itinerary dan terima token akses |
-| GET / PUT | `/api/itineraries/{id}` | `X-Plan-Token`; menyimpan aktivitas, termasuk `sourceItem` |
-| POST | `/api/itineraries/{id}/quote` | `X-Plan-Token`; cek harga dan stok komponen belum dipesan |
-| POST | `/api/itineraries/{id}/book` | `X-Plan-Token`; body `{"customer":{"name":"...","email":"...","phone":"..."}}` |
-| POST | `/api/itineraries/{id}/sync` | `X-Plan-Token`; refresh status reservasi melalui provider |
-| POST | `/api/itineraries/{id}/analyze` | `X-Plan-Token`; analisis konflik waktu lokal |
-| GET / POST | `/api/packages[/{id}...]` | API paket curated V3, tetap tersedia |
-| GET / POST | `/api/orders/{id}[ /sync]` | `X-Order-Token`; sumber status asli provider |
-
-**Contoh `sourceItem` hotel** pada `PlanActivity`: `{"type":"hotel","hotelId":"H01","roomId":"R0101","checkIn":"2026-12-10","checkOut":"2026-12-12","guests":2}`.
-**Contoh `sourceItem` wisata**: `{"type":"wisata","destinationId":1,"visitDate":"2026-12-11","quantity":2,"tier":"base"}`. Ini hanya bentuk kontrak, bukan ketersediaan/harga untuk tanggal tersebut.
-
-## Pipeline booking itinerary
-
-```text
-Pilih kamar Hotel + tiket Wisata dari API katalog
-       ↓
-Simpan itinerary dengan referensi SourceItem
-       ↓
-Quote live setiap layanan (tidak menjamin stok)
-       ↓
-Checkout: preflight ulang semua layanan
-       ↓
-Persist order + kaitkan aktivitas ke ID order
-       ↓
-Setiap provider: simpan IN_FLIGHT → POST Idempotency-Key → simpan respons
-       ↓
-Jika required gagal pasti: kompensasi terverifikasi bila tersedia
-Jika timeout/ID tak ada: UNKNOWN, tidak retry secara buta
-       ↓
-Status paket dan aktivitas diperbarui; dapat disinkronkan kemudian
+```powershell
+git fetch origin
+git switch --track origin/cloudflare-deploy
+cd cloudflare
+npm install
+npm test
+npx wrangler dev
 ```
 
-## Status implementasi yang dapat dipertanggungjawabkan
+Jika branch sudah tersedia secara lokal, gunakan `git switch cloudflare-deploy`. D1 lokal perlu migrasi sebelum fungsi penyimpanan digunakan. **BOOKING_ENABLED=false** secara default; fitur checkout penyedia belum siap diaktifkan untuk publik.
 
-| Fitur | Kode/UI | Tes lokal/mock | API produksi |
-|---|---|---|---|
-| Katalog Hotel dan Wisata | ✅ | ✅ existing | Perlu cek sesuai deployment |
-| Rekomendasi satu wilayah | ✅ | ✅ | Perlu cek real data pada saat demo |
-| Editor itinerary linked ke layanan | ✅ | ✅ validasi backend | N/A |
-| Quote dan booking itinerary hingga 12 layanan | ✅ | ✅ tes mock | ❌ belum dites dengan token partner |
-| Sinkronisasi Hotel DECLINED ke aktivitas | ✅ | ✅ tes mock | ❌ perlu demo provider aktual |
-| Pencegahan checkout ulang untuk aktivitas terhubung | ✅ | ✅ tes mock | N/A |
-| Paket curated + quote + saga | ✅ V3 | ✅ tes lama | ❌ belum diuji produksi |
-| Katalog unggulan wilayah & budget | ✅ | ⚠️ baru tes JS syntax, belum UI E2E | ⚠️ perlu data real |
-| Semantic mapping 5 wilayah | ✅ | ✅ | N/A |
-| OWL reasoner / SPARQL | ❌ | — | — |
-| Transportasi | ❌ Ditunda | — | — |
-| Sinkronisasi background tanpa browser | ❌ | — | — |
-| Pembayaran nyata / rollback atomik | ❌ | — | — |
+[Petunjuk lokal & Git](docs/DEVELOPMENT.md) · [Setup D1 dan GitHub auto-deploy](docs/DEPLOYMENT_CLOUDFLARE.md).
 
-## Keterbatasan dan keamanan
+## Alur penggunaan
 
-- Setiap penyedia tetap independen. Saat API Hotel mati, JogjaTrip tidak bisa memvalidasi atau membuat booking Hotel; rencana tersimpan tetap dapat dibuka.
-- **Pemesanan yang sudah dibuat tidak boleh diubah/dihapus dari editor** untuk mencegah perubahan rencana diklaim mengubah reservasi asli. Perubahan layanan harus melalui prosedur provider.
-- Quote harga bersifat sesaat. Harga dan stok diverifikasi ulang sebelum POST booking. Jam aktivitas default hanyalah saran, bukan slot kunjungan resmi.
-- Reschedule dan cancel antarprovider yang tidak terdokumentasi **tidak** dikarang. Kompensasi hanya dilakukan pada Hotel jika operasi pembatalan terverifikasi tersedia, dan tidak menjamin rollback atomik.
-- Timeout provider dapat menghasilkan status `UNKNOWN`; jangan mengulangi checkout sebelum rekonsiliasi. Proses booking menggunakan penyimpanan order sebelum/sesudah setiap langkah dan kunci idempotensi stabil.
-- Token akses itinerary dan order disimpan di browser untuk keperluan prototipe (gunakan perangkat pribadi); secret hash disimpan oleh backend. Token provider tidak dikirim ke frontend.
-- `ontology/jogjatrip-core.ttl` dan `ontology/region-mappings.json` adalah artefak semantik. Pemetaan Go eksplisit dan tidak mengeksekusi OWL reasoning.
-- Penyimpanan file lokal dapat hilang pada hosting serverless/stateless. Untuk kebutuhan hosting persisten, gunakan konfigurasi Supabase Free yang sudah tersedia dan migrasi pada `db/supabase.sql`.
+1. Tentukan tanggal, wilayah, jumlah orang, dan anggaran perjalanan.
+2. Temukan hotel/kamar dan/atau tiket destinasi dari katalog penyedia.
+3. Tentukan **tanggal dan jam rencana** setiap layanan. Beberapa wisata dapat dijadwalkan dalam satu hari jika memungkinkan.
+4. Simpan ke **Pilihan Saya** atau susun **Itinerary** harian; pengguna juga dapat membuat agenda non-booking.
+5. Gunakan **Periksa harga & ketersediaan**. Quote tidak menahan stok.
+6. Apabila checkout telah diaktifkan dan teruji, JogjaTrip mengirim reservasi ke provider yang bersangkutan.
+7. Pantau **Pesanan**: identitas layanan, detail kamar/tiket, referensi asli, harga dan status sinkronisasi. Jika provider gagal, lihat status terakhir beserta peringatannya.
 
-## Pengujian
+[Langkah penggunaan lengkap dan contoh kasus](docs/USER_GUIDE.md).
 
-Jalankan `go vet ./...` dan `go test ./...` dari root proyek. Tes baru pada `integrated_test.go` mencakup rekomendasi semantik, token wajib, quote, booking dua provider, anti-duplicate checkout, status `DECLINED`, perubahan referensi booking yang ditolak, dan preflight gagal tanpa POST apa pun.
+## API dan semantik
 
-Lihat `V5_CHANGELOG.md` untuk daftar perubahan. Tidak ada library eksternal baru.
+Endpoint utama mencakup `GET /api/health`, `GET /api/catalog/{which}`, `GET /api/recommendations`, `POST /api/quote`, `POST /api/itineraries`, `GET /api/orders/{id}/details`, dan endpoint paket. Akses detail itinerary/pesanan memerlukan token pengguna terkait.
 
+Dokumentasi kontrak: [API Reference](docs/API_REFERENCE.md). Kosakata: [`ontology/jogjatrip-core.ttl`](ontology/jogjatrip-core.ttl), dan [`ontology/region-mappings.json`](ontology/region-mappings.json). Implementasi mapping saat ini menggunakan aturan eksplisit di backend, **bukan OWL reasoner atau SPARQL endpoint**.
 
-## Perbaikan jadwal pengguna (V5.1)
+## Deployment, pengujian, dan keamanan
 
-- Saat memilih Hotel/kamar atau Wisata dari Itinerary Builder, pengguna menentukan tanggal, jam mulai, dan jam selesai lewat dialog. Tidak lagi otomatis ditetapkan menjadi 09.00–11.00 atau 14.00–15.00.
-- Pratinjau paket rekomendasi menampilkan pengaturan tanggal dan waktu untuk setiap komponen. Beberapa kunjungan boleh ditempatkan pada hari yang sama, termasuk hari pertama; hari terakhir bukan otomatis tempat menumpuk semua wisata.
-- Jam agenda bukan slot tiket/hotel yang dikonfirmasi. Jam operasional hanya ditampilkan sebagai informasi jika katalog mengandung data tersebut; ketika tidak tersedia, tidak dibuat jam buka/tutup fiktif.
-- Perubahan jam sebelum booking tidak mengubah booking provider. Sesudah memiliki orderId, perubahan layanan harus melalui prosedur provider. Transportasi tetap belum bisa dibooking.
-- Durasi sesi aktivitas masih dibatasi untuk satu tanggal (jam selesai harus sesudah jam mulai) sesuai validasi yang ada di backend. Jika ingin aktivitas melewati tengah malam diperlukan model yang berbeda.
+- **Go:** proses lokal atau hosting Go yang mendukung penyimpanan persisten; penyimpanan file lokal tidak cocok untuk filesystem serverless yang sementara.
+- **Cloudflare:** Workers + D1; konfigurasi database pada `cloudflare/wrangler.jsonc` di branch `cloudflare-deploy` telah diisi UUID-nya, tetapi **itu bukan bukti database dapat diakses atau website sudah ter-deploy**.
+- **CI:** `.github/workflows/ci.yml` pada branch pengembangan menguji Go, Node/mock, dan Wrangler *dry-run*. Uji produksi D1 dan booking provider adalah tahap terpisah.
+- **Keamanan:** partner token hanya di environment server / Workers Secrets. Jangan commit `.env`, data pelanggan, atau kredensial. Kode ini adalah prototipe akademik, bukan sistem pembayaran riil.
 
+**Status verifikasi terbaru:** [Project Status](docs/PROJECT_STATUS.md) · [Pengujian di GitHub](https://github.com/Sapexxx/jogjatrip-itinerary/actions) · [Pull Request Cloudflare](https://github.com/Sapexxx/jogjatrip-itinerary/pull/1).
 
-## V5.2 — Jam perjalanan dipilih wisatawan (Hotel & Wisata)
+## Dokumentasi lain
 
-- Pemesanan satu layanan, dua layanan di Pilihan Saya, dan paket rekomendasi kini menyimpan `plannedStartTime` serta `plannedEndTime` (HH:MM) secara konsisten.
-- Dialog pemilihan Hotel/Wisata meminta tanggal serta perkiraan jam; daftar **Pilihan Saya** menampilkan jadwal dan tombol **Atur jadwal** sebelum quote/checkout. Mengubah tanggal/jam membatalkan quote lama dan mewajibkan pemeriksaan harga/stok lagi.
-- Pemilihan waktu juga tersedia di Itinerary Builder; saat disimpan, waktu agenda disalin ke `sourceItem` jika berhubungan dengan layanan. Aktivitas dengan booking yang sudah terhubung tidak boleh diedit dari agenda.
-- Format waktu pada `Item` merupakan **preferensi rencana JogjaTrip**, bukan reservasi slot dari provider. Backend tetap hanya mengirim field resmi ke Hotel/Wisata, misalnya tanggal menginap / `visit_date`. API Wisata yang diperiksa tidak mendukung pemilihan jam tiket. Jangan menampilkan status `jam terkonfirmasi` tanpa bukti dari provider.
-- Order lama tanpa field waktu tetap dapat dibaca, sementara checkout baru dari Pilihan Saya mewajibkan jam pilihan pengguna. Transportasi belum tersedia dan tidak diimplementasikan.
+| Dokumen | Isi |
+|---|---|
+| [Dokumentasi lengkap](docs/README.md) | Daftar panduan dan catatan historis |
+| [Panduan Pengguna](docs/USER_GUIDE.md) | Alur pengguna Hotel, Wisata, itinerary dan Pesanan |
+| [Arsitektur](docs/ARCHITECTURE.md) | Source of truth, API adapter, semantic mapping |
+| [API Reference](docs/API_REFERENCE.md) | Endpoint, autentikasi, payload |
+| [Development Guide](docs/DEVELOPMENT.md) | Go, Workers, tes, Git workflow |
+| [Cloudflare Deployment](docs/DEPLOYMENT_CLOUDFLARE.md) | D1, Worker, GitHub auto-deploy |
+| [Status dan Batasan](docs/PROJECT_STATUS.md) | Terimplementasi, teruji, belum selesai |
+| [Riwayat versi](docs/history/) | Changelog V4–V5.3 dan laporan pengujian |
 
-## V5.3 — Dashboard Pesanan Informatif
+---
 
-Lihat [V5_3_CHANGELOG.md](V5_3_CHANGELOG.md). Fitur baru `GET /api/orders/{id}/details` (header `X-Order-Token`) mengambil status dari source of truth dan menggabungkan nama, foto, lokasi, serta tipe kamar dari katalog provider bila tersedia. Tampilan **Pesanan** kini memperlihatkan rincian setiap komponen, jadwal pilihan pengguna, harga historis, kode booking penyedia, kesalahan sinkronisasi dan status paket. Semua booking lama tetap dapat dibaca.
-
-Sistem tidak menampilkan nama/foto fiktif ketika katalog provider gagal; harga yang disimpan tidak ditimpa harga katalog terkini. Booking dan pembayaran nyata belum diuji dengan token produksi.
+**Dibangun untuk mata kuliah Interoperabilitas Lanjut.** Fokus utamanya adalah pertukaran data lintas aplikasi secara benar, terverifikasi, dan dapat dijelaskan—bukan mengklaim fitur yang belum didukung partner.
