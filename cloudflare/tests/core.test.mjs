@@ -1,0 +1,18 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {validateItem,regionName,status,validateInput,recompute,addDays,shortId,sha256} from '../src/core.js';
+import {validatePlan,analyze,bookable} from '../src/plans.js';
+import {templates} from '../src/packages.js';
+const hotel={type:'hotel',hotelId:'H01',roomId:'R0101',checkIn:'2026-11-28',checkOut:'2026-11-30',guests:2,plannedStartTime:'16:00',plannedEndTime:'17:00'};
+const ticket={type:'wisata',destinationId:1,visitDate:'2026-11-29',quantity:2,tier:'base',plannedStartTime:'17:30',plannedEndTime:'19:30'};
+test('pemetaan wilayah administratif',()=>{assert.equal(regionName('kabupaten-sleman'),'Sleman');assert.equal(regionName('Kota Yogyakarta'),'Kota Yogyakarta');assert.equal(regionName('kabupaten-bantul'),'Bantul')});
+test('jam wisata fleksibel sampai malam',()=>{validateItem(ticket);assert.throws(()=>validateItem({...ticket,plannedEndTime:'17:00'}))});
+test('validasi tanggal stay dan tiket',()=>{validateItem(hotel);validateInput({customer:{name:'Test',email:'test@example.org'},items:[hotel,ticket]});assert.throws(()=>validateItem({...hotel,checkOut:'2026-11-28'}))});
+test('status penyedia dipetakan tanpa menyamakan raw',()=>{assert.equal(status('PAID'),'CONFIRMED');assert.equal(status('DECLINED'),'DECLINED');assert.equal(status('NOVEL'),'UNKNOWN')});
+test('hitung status parsial',()=>{let o={items:[{status:'CONFIRMED',amount:10000},{status:'DECLINED',amount:20000}]};recompute(o);assert.equal(o.status,'PARTIAL');assert.equal(o.total,10000)});
+test('discount hanya berlaku untuk paket dengan seluruh required confirmed',()=>{let o={packageId:'p1',pricing:{bundleDiscount:5000},items:[{status:'CONFIRMED',required:true,amount:20000},{status:'DECLINED',required:true,amount:15000}]};recompute(o);assert.equal(o.pricing.appliedDiscount,0)});
+test('tanggal tambah hari tahan bulan',()=>assert.equal(addDays('2026-11-30',1),'2026-12-01'));
+test('short id dan hashing',async()=>{assert.match(shortId('JT-'),/^JT-[A-Z2-7]{12}$/);assert.equal((await sha256('test')).length,64)});
+test('itinerary aman saat tanggal provider tidak cocok',()=>{let p={title:'Perjalanan',startDate:'2026-11-28',endDate:'2026-11-30',activities:[{type:'wisata',title:'Wisata',date:'2026-11-28',startTime:'17:30',endTime:'19:30',sourceItem:ticket}]};assert.throws(()=>validatePlan(p))});
+test('itinerary quote hanya layanan belum dibooking',()=>{let p={activities:[{type:'hotel',title:'Hotel',date:hotel.checkIn,sourceItem:hotel,orderId:'JT-already'},{type:'wisata',title:'Ticket',date:ticket.visitDate,sourceItem:ticket}]};assert.deepEqual(bookable(p),[1])});
+test('template paket tersedia dalam arsip',()=>assert.equal(templates.length,2));
