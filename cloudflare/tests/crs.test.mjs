@@ -21,6 +21,7 @@ test('No province-to-city inference, substring matching, or conflicting city lab
     assert.equal(regionName(value),'',value);
   }
   assert.equal(regionFromFields('Sleman','kabupaten-sleman'),'Sleman');
+  assert.equal(regionName('  Kabupaten   Sleman  '),'Sleman');
   assert.throws(()=>regionFromFields('Bantul','Sleman'),/bertentangan/);
   assert.equal(regionFromFields('Sleman','Alamat umum'),'Sleman');
 });
