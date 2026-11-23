@@ -31,7 +31,6 @@ jobs:
         run: node --check cloudflare/tools/check-interop.mjs
       - name: Check eight live interoperability routes (GET only)
         id: audit
-        continue-on-error: true
         run: node cloudflare/tools/check-interop.mjs
       - name: Summarize verified results
         if: always()
