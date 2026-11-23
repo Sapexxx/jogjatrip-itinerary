@@ -78,6 +78,7 @@ test('transport token stays in D1 and never appears in booking, GET, sync or det
   const booked=await send('/api/book','POST',{customer,items:[transport]});
   assert.equal(booked.status,200,JSON.stringify(booked.body));
   assert.equal(booked.body.order.status,'PROCESSING');
+  assert.equal(booked.body.order.estimatedSubtotal,350000);
   assert.equal(booked.body.order.items[0].status,'PENDING');
   assert.ok(!JSON.stringify(booked.body).includes('provider-token-sensitive'));
   const row=env.DB.orders.get(booked.body.order.id);
