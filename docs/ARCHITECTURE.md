@@ -13,7 +13,7 @@ flowchart TB
   C <--> F["Wisata Jogja API\nFlask / Vercel"]
   E <--> G[("Data Hotel / booking hotel")]
   F <--> H[("Data Wisata / booking tiket")]
-  T["Transport Service\nBelum tersedia"] -.-> C
+  C <--> T["JogjaTrans\nRust / Cloudflare Workers + D1"]
 ```
 
 ## 2. Pembagian tanggung jawab
@@ -23,6 +23,7 @@ flowchart TB
 | Identitas hotel dan kamar | JogjaStay | JogjaTrip hanya mengonsumsi katalog |
 | Harga hotel / kapasitas kamar | JogjaStay | Harus dicek pada tanggal yang dipilih |
 | Destinasi / kuota dan harga tiket | Wisata Jogja | Harga per tiket tidak sama dengan tarif kamar per malam |
+| Kendaraan sewa, stok dan booking simulasi | JogjaTrans | Harga per hari dan token booking privat dikelola provider |
 | Referensi reservasi / status mentah | Provider terkait | Booking Hotel dan Wisata disimpan terpisah |
 | Jadwal yang dipilih pengguna | JogjaTrip | Preferensi, bukan konfirmasi slot jam |
 | Paket dan aturan diskon bundle | JogjaTrip | Tidak mengubah harga dasar provider |
@@ -62,12 +63,14 @@ sequenceDiagram
     participant JT as JogjaTrip Backend
     participant H as Hotel Service
     participant W as Wisata Service
+    participant T as JogjaTrans Rental
     participant DB as Penyimpanan JogjaTrip
 
     User->>UI: Pilih hotel, kamar, wisata dan jadwal
     UI->>JT: Ambil katalog dan rekomendasi
     JT->>H: GET katalog hotel/kamar
     JT->>W: GET katalog wisata
+    JT->>T: GET katalog rental berdasarkan tanggal
     JT-->>UI: Pilihan hasil normalisasi
     User->>UI: Simpan itinerary
     UI->>JT: POST /api/itineraries
@@ -77,6 +80,7 @@ sequenceDiagram
     UI->>JT: POST itinerary/{id}/quote
     JT->>H: GET ketersediaan (bila ada hotel)
     JT->>W: GET ketersediaan (bila ada wisata)
+    JT->>T: GET stok dan estimasi sewa kendaraan
     JT-->>UI: Quote / ketersediaan per komponen
 ```
 
@@ -100,6 +104,7 @@ Perlu dibedakan:
 - `CONFIRMED`: status reservasi sudah dikonfirmasi menurut pemetaan status provider; bukan bukti pembayaran uang nyata.
 - `PARTIAL`: ada komponen berhasil dan lainnya gagal/belum pasti.
 - `FAILED / DECLINED`: kegagalan menurut hasil yang tersedia.
+- `PENDING`: permintaan tercatat, belum dikonfirmasi provider; `recorded` dan `contacted` JogjaTrans termasuk PENDING.
 - `UNKNOWN`: respons timeout/tidak dapat dipastikan. **Jangan melakukan retry booking secara membabi buta.**
 
 Status mentah seperti `PAID` (Wisata simulasi) atau `DECLINED` (Hotel) harus tetap tercatat. Penjadwalan ulang kegiatan pada itinerary tidak boleh diam-diam mengubah reservasi di provider. Refund dan kompensasi hanya dapat dilakukan sesuai operasi yang benar-benar tersedia pada partner; tidak ada transaksi lintas provider yang atomik.
@@ -115,3 +120,7 @@ Status mentah seperti `PAID` (Wisata simulasi) atau `DECLINED` (Hotel) harus tet
 - Operasi berisiko (booking, sinkronisasi, kompensasi) memerlukan penyimpanan dan audit yang tahan restart.
 
 Lanjutkan ke [API Reference](API_REFERENCE.md) dan [Status Implementasi](PROJECT_STATUS.md).
+
+## 8. Rental JogjaTrans (PR-4)
+
+JogjaTrip menggunakan `TRANSPORT_API_URL` untuk mengambil katalog dan quote sewa langsung dari JogjaTrans. Pada mode demo terbatas, booking memakai `Idempotency-Key`; token akses booking penyedia disimpan dalam D1 dan tidak pernah dikembalikan kepada browser. Pemeriksaan status memakai header `X-Booking-Token`. Katalog dan harga rental simulatif; pembatalan transportasi membutuhkan tindak lanjut manual. Tidak diperlukan produk Cloudflare berbayar baru, cukup Worker dan D1 yang sudah ada.

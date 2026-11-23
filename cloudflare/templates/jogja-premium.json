@@ -6,6 +6,7 @@
   ],
   "addOns":[
     {"id":"tiket-plus","name":"Upgrade tingkat tiket wisata (jika tersedia)","kind":"upgrade","dependsOn":"keraton","maxQty":1,"priceSource":"provider_live","targetComponentId":"keraton","upgradeTier":"plus"},
+    {"id":"rental-mpv","name":"Sewa MPV selama 2 hari (estimasi simulasi)","kind":"extra_component","maxQty":1,"priceSource":"provider_live_simulated","component":{"kind":"transport","dayOffset":0,"vehicleId":"AVANZA","days":2,"withDriver":false}},
     {"id":"agenda-otomatis","name":"Agenda dari booking terkonfirmasi","kind":"native","maxQty":1,"priceSource":"fixed_idr","fixedIdr":0}
   ],
   "bundleDiscount":{"type":"fixed","value":25000},"active":true
