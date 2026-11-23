@@ -10,12 +10,17 @@ export const addDays=(date,days)=>{let d=new Date(date+'T12:00:00Z');d.setUTCDat
 export function validTime(a,b){if(!a&&!b)return true;return /^([01]\d|2[0-3]):[0-5]\d$/.test(a||'')&&/^([01]\d|2[0-3]):[0-5]\d$/.test(b||'')&&b>a}
 export function validateCustomer(x){if(!x||!txt(x.name).trim()||!/^.+@.+\..+$/.test(txt(x.email))) fail(400,'Nama dan email pemesan wajib valid');}
 export function validateItem(it){
-  if(!it||!['hotel','wisata'].includes(it.type))fail(400,'Tipe layanan tidak terdaftar');
+  if(!it||!['hotel','wisata','transport'].includes(it.type))fail(400,'Tipe layanan tidak terdaftar');
   if(!validTime(it.plannedStartTime,it.plannedEndTime))fail(400,'Jam mulai/selesai wajib HH:MM dan selesai setelah mulai');
   if(it.type==='hotel'&&(!txt(it.hotelId)||!txt(it.roomId)||!asDate(it.checkIn)||!asDate(it.checkOut)||it.checkOut<=it.checkIn||n(it.guests)<1||n(it.guests)>20))fail(400,'Parameter hotel tidak valid');
+  if(it.type==='transport'){
+    const days=(Date.parse(it.endDate+'T12:00:00Z')-Date.parse(it.startDate+'T12:00:00Z'))/86400000+1;
+    if(!/^[A-Za-z0-9_-]{1,100}$/.test(txt(it.vehicleId))||!asDate(it.startDate)||!asDate(it.endDate)||!Number.isInteger(days)||days<1||days>30||typeof it.withDriver!=='boolean')fail(400,'Parameter rental transportasi tidak valid');
+  }
   if(it.type==='wisata'&&(!Number.isInteger(Number(it.destinationId))||n(it.destinationId)<1||!asDate(it.visitDate)||n(it.quantity)<1||n(it.quantity)>20||!['base','plus'].includes(it.tier))) fail(400,'Parameter tiket wisata tidak valid');
 }
-export function validateInput(x,max=5){validateCustomer(x?.customer);if(!Array.isArray(x?.items)||!x.items.length||x.items.length>max)fail(400,`Pilih 1–${max} layanan`);x.items.forEach(validateItem);return x}
+export function validateTransportPhone(value){if(!/^[+0-9 ()-]{9,20}$/.test(txt(value).trim()))fail(400,'Nomor telepon transportasi harus 9–20 karakter');}
+export function validateInput(x,max=5){validateCustomer(x?.customer);if(!Array.isArray(x?.items)||!x.items.length||x.items.length>max)fail(400,`Pilih 1–${max} layanan`);x.items.forEach(validateItem);if(x.items.some(it=>it.type==='transport'))validateTransportPhone(x.customer?.phone);return x}
 // Resolve administrative regions from the shared CRS vocabulary using exact aliases.
 import vocabulary from '../crs-vocabulary.json' with {type:'json'};
 const cleanRegion = raw => txt(raw).trim().toLowerCase().replace(/[-_]/g,' ').replace(/\\s+/g,' ');
@@ -46,6 +51,7 @@ export function accessToken(){return hex(crypto.getRandomValues(new Uint8Array(2
 const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 export function shortId(prefix){let b=crypto.getRandomValues(new Uint8Array(8)),bits=0,buffer=0,out='';for(const x of b){buffer=(buffer<<8)|x;bits+=8;while(bits>=5){bits-=5;out+=alphabet[(buffer>>bits)&31]}}return prefix+out.slice(0,12)}
 export function safeId(id,what='order'){const re=what==='plan'?/^PL-[A-Z2-7]{12}$/:/^JT-(?:[A-Z2-7]{12}|[a-f0-9]{32})$/;if(!re.test(id))fail(404,'ID tidak dikenal')}
-export function noSecret(x){let {secretHash,orderLock,...rest}=x;return rest}
+// Public JSON projection. Do not use this when persisting a provider access token.
+export function noSecret(x){return JSON.parse(JSON.stringify(x,(k,v)=>['secretHash','orderLock','providerAccessToken'].includes(k)?undefined:v))}
 export function json(body,statusCode=200){return new Response(JSON.stringify(body),{status:statusCode,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}})}
 export async function readJSON(request,maxBytes=128000){let raw=await request.text();if(raw.length>maxBytes)fail(413,'Payload terlalu besar');try{return JSON.parse(raw)}catch{fail(400,'JSON tidak valid')}}
