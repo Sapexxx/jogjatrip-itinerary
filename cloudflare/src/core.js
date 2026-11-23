@@ -23,7 +23,7 @@ export function validateTransportPhone(value){if(!/^[+0-9 ()-]{9,20}$/.test(txt(
 export function validateInput(x,max=5){validateCustomer(x?.customer);if(!Array.isArray(x?.items)||!x.items.length||x.items.length>max)fail(400,`Pilih 1–${max} layanan`);x.items.forEach(validateItem);if(x.items.some(it=>it.type==='transport'))validateTransportPhone(x.customer?.phone);return x}
 // Resolve administrative regions from the shared CRS vocabulary using exact aliases.
 import vocabulary from '../crs-vocabulary.json' with {type:'json'};
-const cleanRegion = raw => txt(raw).trim().toLowerCase().replace(/[-_]/g,' ').replace(/\\s+/g,' ');
+const cleanRegion = raw => txt(raw).trim().toLowerCase().replace(/[-_]/g,' ').replace(/\s+/g,' ');
 const regionLookup = new Map();
 for (const region of vocabulary.regions) {
   for (const name of [region.label, ...region.aliases, ...Object.values(region.providerRepresentation)]) {
