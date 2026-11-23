@@ -128,3 +128,28 @@ test('noSecret strips nested provider credentials without changing original',()=
  const raw={items:[{providerAccessToken:'hidden',item:{type:'transport'}}],secretHash:'also hidden'};
  const pub=noSecret(raw);assert.ok(!JSON.stringify(pub).includes('hidden'));assert.equal(raw.items[0].providerAccessToken,'hidden');
 });
+
+test('itinerary with rental dates can be saved, quoted and booked while PENDING',async()=>{
+ globalThis.fetch=providerMock;
+ try{
+  const plan={title:'Rencana Rental',startDate:'2026-12-01',endDate:'2026-12-03',activities:[
+   {type:'transport',title:'Sewa Brio',date:'2026-12-01',startTime:'08:00',endTime:'09:00',sourceItem:transport}
+  ]};
+  let r=await send('/api/itineraries','POST',plan);
+  assert.equal(r.status,201,JSON.stringify(r.body));
+  const id=r.body.itinerary.id,token=r.body.accessToken;
+  const headers={'X-Plan-Token':token};
+  r=await send('/api/itineraries/'+id+'/quote','POST',{},headers);
+  assert.equal(r.status,200,JSON.stringify(r.body));
+  assert.equal(r.body.available,true);
+  assert.equal(r.body.total,350000);
+  r=await send('/api/itineraries/'+id+'/book','POST',{customer},headers);
+  assert.equal(r.status,200,JSON.stringify(r.body));
+  assert.equal(r.body.order.status,'PROCESSING');
+  assert.equal(r.body.itinerary.activities[0].bookingStatus,'PENDING');
+  assert.ok(!JSON.stringify(r.body).includes('provider-token-sensitive'));
+  r=await send('/api/itineraries/'+id+'/sync','POST',{},headers);
+  assert.equal(r.status,200);
+  assert.equal(r.body.itinerary.activities[0].bookingStatus,'PENDING');
+ }finally{globalThis.fetch=originalFetch}
+});
