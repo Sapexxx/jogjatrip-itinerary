@@ -16,9 +16,28 @@ export function validateItem(it){
   if(it.type==='wisata'&&(!Number.isInteger(Number(it.destinationId))||n(it.destinationId)<1||!asDate(it.visitDate)||n(it.quantity)<1||n(it.quantity)>20||!['base','plus'].includes(it.tier))) fail(400,'Parameter tiket wisata tidak valid');
 }
 export function validateInput(x,max=5){validateCustomer(x?.customer);if(!Array.isArray(x?.items)||!x.items.length||x.items.length>max)fail(400,`Pilih 1–${max} layanan`);x.items.forEach(validateItem);return x}
-export function regionName(raw){const s=txt(raw).toLowerCase();if(s.includes('sleman'))return 'Sleman';if(s.includes('bantul'))return 'Bantul';if(s.includes('gunungkidul')||s.includes('gunung kidul'))return 'Gunungkidul';if(s.includes('kulon'))return 'Kulon Progo';if(s.includes('yogyakarta')||s.includes('jogja'))return 'Kota Yogyakarta';return ''}
-export function regionSlug(s){let r=regionName(s);return r==='Kota Yogyakarta'?'kota-yogyakarta':'kabupaten-'+r.toLowerCase().replaceAll(' ','-')}
-export function status(raw){switch(txt(raw).trim().toUpperCase()){case 'CONFIRMED':case 'PAID':case 'SUCCESS':case 'COMPLETED':return 'CONFIRMED';case 'DECLINED':case 'REJECTED':return 'DECLINED';case 'CANCELLED':case 'CANCELED':case 'REFUNDED':return 'CANCELLED';case 'FAILED':return 'FAILED';case 'PENDING':case 'HOLD':case 'PROCESSING':return 'PENDING';default:return 'UNKNOWN'}}
+// Resolve administrative regions from the shared CRS vocabulary using exact aliases.
+import vocabulary from '../crs-vocabulary.json' with {type:'json'};
+const cleanRegion = raw => txt(raw).trim().toLowerCase().replace(/[-_]/g,' ').replace(/\\s+/g,' ');
+const regionLookup = new Map();
+for (const region of vocabulary.regions) {
+  for (const name of [region.label, ...region.aliases, ...Object.values(region.providerRepresentation)]) {
+    const key = cleanRegion(name);
+    if (regionLookup.has(key) && regionLookup.get(key) !== region.conceptId) throw new Error('Conflicting CRS region alias: ' + name);
+    regionLookup.set(key, region.conceptId);
+  }
+}
+const regionById = new Map(vocabulary.regions.map(r => [r.conceptId, r]));
+export function regionConcept(raw){return regionLookup.get(cleanRegion(raw)) || '';}
+export function regionName(raw){return regionById.get(regionConcept(raw))?.label || '';}
+export function regionSlug(raw){const region=regionById.get(regionConcept(raw));return region?.providerRepresentation?.wisata || '';}
+export function regionFromFields(...values){
+  const ids = new Set(values.map(regionConcept).filter(Boolean));
+  if(ids.size>1)fail(422,'Wilayah administratif bertentangan');
+  return regionById.get([...ids][0])?.label || '';
+}
+export const semanticVocabulary = vocabulary;
+export function status(raw){switch(txt(raw).trim().toUpperCase()){case 'CONFIRMED':case 'PAID':case 'SUCCESS':case 'COMPLETED':return 'CONFIRMED';case 'DECLINED':case 'REJECTED':return 'DECLINED';case 'CANCELLED':case 'CANCELED':case 'REFUNDED':return 'CANCELLED';case 'FAILED':return 'FAILED';case 'PENDING':case 'HOLD':case 'PROCESSING':case 'RECORDED':case 'CONTACTED':return 'PENDING';default:return 'UNKNOWN'}}
 export function recompute(o){let yes=0,bad=0,pending=0,unknown=0,notattempted=0,amount=0,requiredOK=true;for(const a of o.items){if(a.status==='CONFIRMED'){yes++;amount+=n(a.amount)}else if(['DECLINED','CANCELLED','FAILED'].includes(a.status))bad++;else if(['PENDING','IN_FLIGHT'].includes(a.status))pending++;else if(a.status==='NOT_ATTEMPTED')notattempted++;else unknown++;if(o.packageId&&a.required&&a.status!=='CONFIRMED')requiredOK=false}
   if(o.packageId){let discount=requiredOK&&unknown===0&&pending===0&&notattempted===0?Math.min(n(o.pricing?.bundleDiscount),amount):0;o.pricing={...o.pricing,appliedDiscount:discount,total:Math.max(0,amount-discount)};o.total=o.pricing.total;o.status=unknown?'UNKNOWN':pending?'PROCESSING':notattempted&&!yes&&!bad?'PROCESSING':!requiredOK?(yes?'PARTIAL':'FAILED'):yes?'CONFIRMED':'FAILED'}else{o.total=amount;o.status=unknown?'UNKNOWN':pending?'PROCESSING':yes===o.items.length&&yes?'CONFIRMED':yes?'PARTIAL':bad||notattempted?'FAILED':'UNKNOWN'}return o}
 export const hex=b=>Array.from(new Uint8Array(b),x=>x.toString(16).padStart(2,'0')).join('');
