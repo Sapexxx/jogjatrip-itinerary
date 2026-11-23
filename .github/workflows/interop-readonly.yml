@@ -1,0 +1,52 @@
+name: PR-5 read-only interoperability audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/interop-alignment-pr5
+    paths:
+      - 'cloudflare/tools/check-interop.mjs'
+      - '.github/workflows/interop-readonly.yml'
+  pull_request:
+    branches:
+      - cloudflare-deploy
+    paths:
+      - 'cloudflare/tools/check-interop.mjs'
+      - '.github/workflows/interop-readonly.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  interop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax check
+        run: node --check cloudflare/tools/check-interop.mjs
+      - name: Check eight live interoperability routes (GET only)
+        id: audit
+        continue-on-error: true
+        run: node cloudflare/tools/check-interop.mjs
+      - name: Summarize verified results
+        if: always()
+        shell: bash
+        run: |
+          if [ -f interop-report/summary.md ]; then
+            cat interop-report/summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Interop report not generated; check the job logs." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload JSON and Markdown evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr5-interop-readonly
+          path: interop-report/
+          if-no-files-found: warn
+          retention-days: 7
