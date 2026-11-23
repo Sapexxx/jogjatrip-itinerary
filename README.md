@@ -2,7 +2,7 @@
 
 **Platform Perencanaan Perjalanan Terintegrasi di Yogyakarta**
 
-JogjaTrip merupakan aplikasi prototipe untuk mata kuliah **Interoperabilitas Lanjut**. Aplikasi ini menghubungkan layanan Hotel dan Wisata melalui API sehingga pengguna dapat memilih layanan, menyusun itinerary, meninjau estimasi biaya, dan memantau informasi reservasi dalam satu antarmuka.
+JogjaTrip merupakan aplikasi prototipe untuk mata kuliah **Interoperabilitas Lanjut**. Aplikasi ini menghubungkan layanan Hotel, Wisata, dan Transportasi melalui API sehingga pengguna dapat memilih layanan, menyusun itinerary, meninjau estimasi biaya, dan memantau informasi reservasi dalam satu antarmuka.
 
 **[Kunjungi Website](https://jogjatrip-itinerary.azzahraghania110.workers.dev/)** · **[Dokumentasi Proyek](docs/README.md)** · **[Status Implementasi](docs/PROJECT_STATUS.md)**
 
@@ -10,13 +10,13 @@ JogjaTrip merupakan aplikasi prototipe untuk mata kuliah **Interoperabilitas Lan
 
 ## Fitur Utama
 
-- **Katalog Hotel dan Wisata** dari layanan penyedia independen.
+- **Katalog Hotel, Wisata, dan Transportasi** dari layanan penyedia independen (rental JogjaTrans: harga simulasi).
 - **Itinerary harian** dengan tanggal, jam pilihan pengguna, dan pemeriksaan konflik jadwal.
 - **Rekomendasi destinasi** berdasarkan normalisasi wilayah administratif DIY.
 - **Paket perjalanan** dengan komponen dan estimasi biaya berdasarkan pemeriksaan layanan.
 - **Informasi pesanan** dan sinkronisasi status ketika data reservasi provider tersedia.
 
-Jam kegiatan dalam itinerary merupakan **rencana pengguna**, bukan slot layanan yang telah dikonfirmasi. Integrasi Transportasi belum tersedia.
+Jam kegiatan dalam itinerary merupakan **rencana pengguna**, bukan slot layanan yang telah dikonfirmasi. Integrasi rental JogjaTrans tersedia pada implementasi Workers JS sebagai katalog, quote, dan booking demo yang dikendalikan `BOOKING_ENABLED=false`.
 
 ## Arsitektur Singkat
 
@@ -25,6 +25,7 @@ flowchart LR
     A["Pengguna"] --> B["JogjaTrip"]
     B --> C["API Hotel"]
     B --> D["API Wisata"]
+    B --> F["API JogjaTrans"]
     B <--> E[("Data Itinerary dan Pesanan")]
 ```
 
