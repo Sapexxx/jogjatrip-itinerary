@@ -21,6 +21,7 @@
   "vars": {
     "HOTEL_API_URL": "https://jogjastay-hotel-service.jogjawisata.workers.dev",
     "WISATA_API_URL": "https://wisata-jogja-ten.vercel.app",
+    "TRANSPORT_API_URL": "https://jogjatrans-service.jogjawisata.workers.dev",
     "BOOKING_ENABLED": "false"
   }
 }
