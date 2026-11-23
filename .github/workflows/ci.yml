@@ -2,9 +2,9 @@ name: JogjaTrip validation
 
 on:
   push:
-    branches: [main, cloudflare-deploy]
+    branches: [main, cloudflare-deploy, 'feat/crs-vocabulary']
   pull_request:
-    branches: [main]
+    branches: [main, cloudflare-deploy]
 
 permissions:
   contents: read

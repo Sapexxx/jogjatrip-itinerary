@@ -1,4 +1,4 @@
-import {ApiError,fail,json,readJSON,noSecret} from './core.js';
+import {ApiError,fail,json,readJSON,noSecret,semanticVocabulary} from './core.js';
 import {catalog,recommendations} from './provider.js';
 import {quote,book,getOrder,syncOrder,details} from './orders.js';
 import {createPlan,getPlan,updatePlan,analyze,quotePlan,bookPlan,syncPlan} from './plans.js';
@@ -7,6 +7,7 @@ import {templates,getPackage,expand,bookPackage,planFromOrder} from './packages.
 function parts(path){return path.split('/').filter(Boolean)}
 async function handle(req,env){if(!env.DB)fail(503,'Binding Cloudflare D1 belum dikonfigurasi');let u=new URL(req.url),p=parts(u.pathname),method=req.method;
  if(p[0]!=='api')return env.ASSETS.fetch(req);
+ if(p.length===2&&p[1]==='semantic'&&method==='GET')return json(semanticVocabulary);
  if(p.length===2&&p[1]==='health'&&method==='GET')return json({service:'JogjaTrip',status:'ok',storage:'cloudflare-d1',bookingEnabled:env.BOOKING_ENABLED==='true',providers:{hotel:!!env.HOTEL_API_URL,wisata:!!env.WISATA_API_URL},note:'Konfigurasi URL bukan pemeriksaan konektivitas provider'});
  if(p.length===3&&p[1]==='catalog'&&method==='GET')return json(await catalog(env,p[2],u.searchParams.get('region')||''));
  if(p.length===2&&p[1]==='recommendations'&&method==='GET')return json(await recommendations(env,u.searchParams.get('hotelId')||''));
