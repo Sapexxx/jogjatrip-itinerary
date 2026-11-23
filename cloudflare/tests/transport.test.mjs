@@ -26,12 +26,13 @@ class MemoryD1 {
 const env={DB:new MemoryD1(),BOOKING_ENABLED:'true',HOTEL_API_URL:'https://hotel.test',WISATA_API_URL:'https://wisata.test',TRANSPORT_API_URL:'https://transport.test',HOTEL_PARTNER_TOKEN:'private-hotel',WISATA_PARTNER_TOKEN:'private-wisata',ASSETS:{fetch:async()=>new Response('static')}};
 const originalFetch=globalThis.fetch;
 const vehicle={id:'BRIO',name:'Honda Brio',type:'mobil',category:'city-car',days:2,available:true,unitsAvailable:2,totalPrice:350000,priceType:'SIMULATED'};
-let transportRequests=[],transportFail=false,stock=2;
+let transportRequests=[],transportFail=false,transportBookingFail=false,stock=2;
 function providerMock(url,opts={}){
  const u=new URL(url);let data,code=200;
  if(u.hostname==='transport.test'){
   transportRequests.push({path:u.pathname,search:u.search,method:opts.method||'GET',headers:opts.headers||{},body:opts.body});
   if(transportFail)return Promise.reject(Error('Transport offline'));
+  if(transportBookingFail&&u.pathname==='/api/v1/rentals/bookings'&&opts.method==='POST')return Promise.reject(Error('Booking timeout'));
   if(u.pathname==='/api/v1/rentals/vehicles')data={vehicles:[{...vehicle,available:stock>0,unitsAvailable:stock}],startDate:u.searchParams.get('startDate'),endDate:u.searchParams.get('endDate')};
   if(u.pathname==='/api/v1/rentals/bookings'&&opts.method==='POST'){data={bookingId:'RT-TEST1',accessToken:'provider-token-sensitive',status:'recorded',totalPrice:350000};code=201}
   if(u.pathname==='/api/v1/rentals/bookings/RT-TEST1')data={bookingId:'RT-TEST1',status:'recorded'};
@@ -153,4 +154,19 @@ test('itinerary with rental dates can be saved, quoted and booked while PENDING'
   assert.equal(r.status,200);
   assert.equal(r.body.itinerary.activities[0].bookingStatus,'PENDING');
  }finally{globalThis.fetch=originalFetch}
+});
+
+test('provider booking timeout is UNKNOWN and must not be retried automatically',async()=>{
+ globalThis.fetch=providerMock;
+ try{
+  transportBookingFail=true;
+  const before=transportRequests.filter(x=>x.path==='/api/v1/rentals/bookings'&&x.method==='POST').length;
+  const r=await send('/api/book','POST',{customer,items:[transport]});
+  assert.equal(r.status,200,JSON.stringify(r.body));
+  assert.equal(r.body.order.items[0].status,'UNKNOWN');
+  assert.equal(r.body.order.status,'UNKNOWN');
+  assert.equal(r.body.order.requiresManualAction,true);
+  const after=transportRequests.filter(x=>x.path==='/api/v1/rentals/bookings'&&x.method==='POST').length;
+  assert.equal(after-before,1,'Only a single provider booking request is allowed');
+ }finally{transportBookingFail=false;globalThis.fetch=originalFetch}
 });
