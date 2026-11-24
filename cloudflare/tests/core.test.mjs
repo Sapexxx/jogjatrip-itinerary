@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validateItem,regionName,status,validateInput,recompute,addDays,shortId,sha256} from '../src/core.js';
+import {validateItem,regionName,status,validateInput,recompute,addDays,shortId,sha256} from '../src/core.ts';
 import {validatePlan,analyze,bookable} from '../src/plans.js';
 import {templates} from '../src/packages.js';
 const hotel={type:'hotel',hotelId:'H01',roomId:'R0101',checkIn:'2026-11-28',checkOut:'2026-11-30',guests:2,plannedStartTime:'16:00',plannedEndTime:'17:00'};
