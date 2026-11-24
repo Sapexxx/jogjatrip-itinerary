@@ -51,11 +51,11 @@ async function multi(tasks,requests){
 }
 const main=[
  probe('1','Stay → Wisata',one('stay','/api/v1/hotels/H11/recommendations',d=>nonempty(d,'destinations'))),
- skip('2','Stay → Transport','Desain berubah menjadi penerusan konteks; endpoint transport-options tidak diimplementasikan. UI belum diuji.'),
+ probe('2','Stay → Transport',one('stay','/api/v1/integrations/rentals?'+new URLSearchParams({checkIn:day(10),checkOut:day(11),type:'mobil',withDriver:'false'}),d=>nonempty(d,'vehicles'))),
  probe('3','Transport → Stay',one('trans','/api/v1/integrations/hotels?city=Sleman',d=>nonempty(d,'hotels'))),
  probe('4','Transport → Wisata',one('trans','/api/v1/integrations/wisata?region=Sleman',d=>nonempty(d,'destinations'))),
  probe('5','Wisata → Stay',one('wisata','/api/v1/integrations/hotels?city=Sleman',d=>nonempty(d,'hotels'))),
- skip('6','Wisata → Transport','Menunggu W4: konfigurasi TRANSPORT_API_URL dan endpoint rental yang benar. Tidak dianggap lulus.'),
+ probe('6','Wisata → Transport',one('wisata','/api/v1/integrations/transport?'+rentalDates,d=>nonempty(d,'vehicles'))),
  probe('7','JogjaTrip → ketiga provider',r=>multi([
   ['hotels','trip','/api/catalog/hotels',d=>{assert.equal(d?.provider,'hotel');return nonempty(d,'items')}],
   ['destinations','trip','/api/catalog/destinations',d=>{assert.equal(d?.provider,'wisata');return nonempty(d,'items')}],
