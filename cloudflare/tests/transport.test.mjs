@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import worker from '../src/index.js';
-import {noSecret} from '../src/core.js';
+import worker from '../src/index.ts';
+import {noSecret} from '../src/core.ts';
 
 class MemoryD1 {
  constructor(){this.orders=new Map();this.plans=new Map()}

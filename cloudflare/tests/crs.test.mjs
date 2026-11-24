@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vocabulary from '../crs-vocabulary.json' with {type:'json'};
-import {regionName,regionSlug,regionConcept,regionFromFields,status} from '../src/core.js';
-import worker from '../src/index.js';
+import {regionName,regionSlug,regionConcept,regionFromFields,status} from '../src/core.ts';
+import worker from '../src/index.ts';
 
 test('CRS version and five regions stay consistent with shared vocabulary',()=>{
   assert.equal(vocabulary.version,'0.1.0');

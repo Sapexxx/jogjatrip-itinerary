@@ -50,11 +50,15 @@ jobs:
         if: steps.detect.outputs.present == 'true'
         working-directory: cloudflare
         run: npm test
+      - name: TypeScript static type check
+        if: steps.detect.outputs.present == 'true'
+        working-directory: cloudflare
+        run: npm run typecheck
       - name: Check Worker entrypoint
         if: steps.detect.outputs.present == 'true'
         working-directory: cloudflare
         run: |
-          node --check src/index.js
+          node --experimental-strip-types --check src/index.ts
           for file in web/*.js; do node --check "$file"; done
       - name: Wrangler dry-run build (no Cloudflare deployment)
         if: steps.detect.outputs.present == 'true'

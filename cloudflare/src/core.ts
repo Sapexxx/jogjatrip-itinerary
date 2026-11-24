@@ -1,5 +1,5 @@
 // Cloudflare-compatible domain layer. Provider-confirmed time slots are NOT inferred.
-export class ApiError extends Error { constructor(code, message){super(message); this.code=code;} }
+export class ApiError extends Error { code: number; constructor(code: number, message: string){super(message); this.code=code;} }
 export const fail=(code,msg)=>{throw new ApiError(code,msg)};
 export const iso=()=>new Date().toISOString();
 export const txt=v=>v===undefined||v===null?'':String(v);
@@ -54,5 +54,5 @@ export function shortId(prefix){let b=crypto.getRandomValues(new Uint8Array(8)),
 export function safeId(id,what='order'){const re=what==='plan'?/^PL-[A-Z2-7]{12}$/:/^JT-(?:[A-Z2-7]{12}|[a-f0-9]{32})$/;if(!re.test(id))fail(404,'ID tidak dikenal')}
 // Public JSON projection. Do not use this when persisting a provider access token.
 export function noSecret(x){return JSON.parse(JSON.stringify(x,(k,v)=>['secretHash','orderLock','providerAccessToken'].includes(k)?undefined:v))}
-export function json(body,statusCode=200){return new Response(JSON.stringify(body),{status:statusCode,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}})}
-export async function readJSON(request,maxBytes=128000){let raw=await request.text();if(raw.length>maxBytes)fail(413,'Payload terlalu besar');try{return JSON.parse(raw)}catch{fail(400,'JSON tidak valid')}}
+export function json(body: unknown,statusCode=200){return new Response(JSON.stringify(body),{status:statusCode,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}})}
+export async function readJSON(request: Request,maxBytes=128000){let raw=await request.text();if(raw.length>maxBytes)fail(413,'Payload terlalu besar');try{return JSON.parse(raw)}catch{fail(400,'JSON tidak valid')}}

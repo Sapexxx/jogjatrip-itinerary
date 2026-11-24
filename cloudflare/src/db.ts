@@ -1,4 +1,4 @@
-import {safeId,fail,sha256,noSecret} from './core.js';
+import {safeId,fail,sha256,noSecret} from './core.ts';
 export async function saveOrder(env,o){await env.DB.prepare('INSERT INTO jt_orders (id,payload,secret_hash,created_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at').bind(o.id,JSON.stringify((({secretHash,orderLock,...persisted})=>persisted)(o)),o.secretHash,o.createdAt,o.updatedAt).run()}
 export async function loadOrder(env,id){safeId(id);let row=await env.DB.prepare('SELECT payload,secret_hash FROM jt_orders WHERE id=?').bind(id).first();if(!row)fail(404,'Pesanan tidak ditemukan');return {...JSON.parse(row.payload),secretHash:row.secret_hash}}
 export async function authorizedOrder(env,id,req){let o=await loadOrder(env,id);let token=req.headers.get('X-Order-Token')||'';if(!token||(await sha256(token))!==o.secretHash)fail(403,'Token pesanan salah');return o}

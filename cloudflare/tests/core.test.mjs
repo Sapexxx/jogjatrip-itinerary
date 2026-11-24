@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validateItem,regionName,status,validateInput,recompute,addDays,shortId,sha256} from '../src/core.js';
-import {validatePlan,analyze,bookable} from '../src/plans.js';
-import {templates} from '../src/packages.js';
+import {validateItem,regionName,status,validateInput,recompute,addDays,shortId,sha256} from '../src/core.ts';
+import {validatePlan,analyze,bookable} from '../src/plans.ts';
+import {templates} from '../src/packages.ts';
 const hotel={type:'hotel',hotelId:'H01',roomId:'R0101',checkIn:'2026-11-28',checkOut:'2026-11-30',guests:2,plannedStartTime:'16:00',plannedEndTime:'17:00'};
 const ticket={type:'wisata',destinationId:1,visitDate:'2026-11-29',quantity:2,tier:'base',plannedStartTime:'17:30',plannedEndTime:'19:30'};
 test('pemetaan wilayah administratif',()=>{assert.equal(regionName('kabupaten-sleman'),'Sleman');assert.equal(regionName('Kota Yogyakarta'),'Kota Yogyakarta');assert.equal(regionName('kabupaten-bantul'),'Bantul')});
