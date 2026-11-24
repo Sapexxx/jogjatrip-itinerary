@@ -72,15 +72,23 @@ async function integratedLoadVehicles(){
 function integratedTransportSummary(){
  const el=ie('v4TransportSummary'),check=ie('v4UseTransport');if(!el||!check)return;
  const acts=planState.activities.filter(a=>a.sourceItem?.type==='transport');
- if(!acts.length){el.hidden=true;el.innerHTML='';return}
+ const cart=state.cart.filter(c=>c.item.type==='transport');
+ const all=[...acts.map(a=>({title:a.title,item:a.sourceItem})),...cart.map(c=>({title:c.name,item:c.item}))];
+ if(!all.length){el.hidden=true;el.innerHTML='';return}
  check.checked=true;el.hidden=false;
- el.innerHTML='<strong>'+acts.length+' kendaraan dipilih</strong>'+acts.map(a=>'<small>'+escapeHTML(a.title)+' · '+integratedRentalDays(a.sourceItem)+' hari · '+(a.sourceItem.withDriver?'Dengan sopir':'Lepas kunci')+'</small>').join('')+'<div class="v4-transport-actions"><button type="button" data-transport-change>Ubah pilihan</button>'+(acts.some(a=>!a.orderId)?'<button type="button" data-transport-remove>Hapus pilihan</button>':'')+'</div>';
- el.querySelector('[data-transport-change]').onclick=()=>integratedOpenTransport();
- el.querySelector('[data-transport-remove]')?.addEventListener('click',()=>{planState.activities=planState.activities.filter(a=>a.sourceItem?.type!=='transport'||a.orderId);integrated.quote=null;check.checked=planState.activities.some(a=>a.sourceItem?.type==='transport');integratedRender()});
+ el.innerHTML='<strong>'+all.length+' kendaraan dipilih</strong>'+all.map(a=>'<small>'+escapeHTML(a.title)+' · '+integratedRentalDays(a.item)+' hari · '+(a.item.withDriver?'Dengan sopir':'Lepas kunci')+'</small>').join('')+'<div class="v4-transport-actions"><button type="button" data-transport-change>Ubah pilihan</button>'+(cart.length||acts.some(a=>!a.orderId)?'<button type="button" data-transport-remove>Hapus pilihan</button>':'')+'</div>';
+ el.querySelector('[data-transport-change]').onclick=()=>{selectCatalogTab('transport');document.querySelector('#explore .section-top').scrollIntoView({behavior:'smooth',block:'start'})};
+ el.querySelector('[data-transport-remove]')?.addEventListener('click',()=>{state.cart=state.cart.filter(c=>c.item.type!=='transport');state.quote=null;planState.activities=planState.activities.filter(a=>a.sourceItem?.type!=='transport'||a.orderId);integrated.quote=null;check.checked=planState.activities.some(a=>a.sourceItem?.type==='transport');saveCart();integratedRender()});
 }
 function integratedTransportPreference(){
  const check=ie('v4UseTransport');if(!check)return;
- check.onchange=()=>{if(!check.checked){const existing=planState.activities.filter(a=>a.sourceItem?.type==='transport');if(existing.some(a=>a.orderId)){check.checked=true;toast('Kendaraan yang telah memiliki pesanan tidak dapat dihapus');return}if(existing.length&&!confirm('Hapus pilihan transportasi dari itinerary?')){check.checked=true;return}planState.activities=planState.activities.filter(a=>a.sourceItem?.type!=='transport');integrated.quote=null;integratedRender()}else{integratedOpenTransport({fromHome:true})}};
+ check.onchange=()=>{
+  if(check.checked){selectCatalogTab('transport');document.querySelector('#explore .section-top').scrollIntoView({behavior:'smooth',block:'start'});return}
+  const existing=planState.activities.filter(a=>a.sourceItem?.type==='transport'),cart=state.cart.filter(c=>c.item.type==='transport');
+  if(existing.some(a=>a.orderId)){check.checked=true;toast('Kendaraan yang telah memiliki pesanan tidak dapat dihapus');return}
+  if((existing.length||cart.length)&&!confirm('Hapus pilihan transportasi dari itinerary?')){check.checked=true;return}
+  state.cart=state.cart.filter(c=>c.item.type!=='transport');state.quote=null;planState.activities=planState.activities.filter(a=>a.sourceItem?.type!=='transport');integrated.quote=null;saveCart();integratedRender();
+ };
 }
 function ihotelRegion(h){return v4HotelRegion(h)}
 function idestinationRegion(d){return v4DestinationRegion(d)}
