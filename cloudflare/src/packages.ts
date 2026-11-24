@@ -1,9 +1,9 @@
 import classic from '../templates/jogja-klasik.json' with {type:'json'};
 import premium from '../templates/jogja-premium.json' with {type:'json'};
-import {fail,asDate,validTime,addDays,n,txt,validateCustomer,validateTransportPhone,validateItem,iso,accessToken,sha256,shortId,status,recompute,noSecret} from './core.js';
-import {availability,provider,bookProvider,cancelHotel} from './provider.js';
-import {createOrder,runSaga} from './orders.js';
-import {savePlan,authorizedOrder,saveOrder} from './db.js';
+import {fail,asDate,validTime,addDays,n,txt,validateCustomer,validateTransportPhone,validateItem,iso,accessToken,sha256,shortId,status,recompute,noSecret} from './core.ts';
+import {availability,provider,bookProvider,cancelHotel} from './provider.ts';
+import {createOrder,runSaga} from './orders.ts';
+import {savePlan,authorizedOrder,saveOrder} from './db.ts';
 export const templates=[classic,premium].filter(p=>p.active);
 export function getPackage(id){let p=templates.find(x=>x.id===id);if(!p)fail(404,'Paket tidak ditemukan');return p}
 function validateRequest(r){if(!r||!asDate(r.startDate)||n(r.guests)<1||n(r.guests)>20||!Array.isArray(r.selectedAddOns)||r.selectedAddOns.length>12||Object.keys(r.schedules||{}).length>24)fail(400,'Tanggal/tamu/add-on paket tidak valid');for(let v of Object.values(r.schedules||{}))if(!validTime(v?.startTime,v?.endTime)||!v?.startTime)fail(400,'Waktu rencana paket tidak valid');return r}

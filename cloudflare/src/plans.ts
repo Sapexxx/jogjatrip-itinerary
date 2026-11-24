@@ -1,8 +1,8 @@
-import {fail,asDate,validTime,validateItem,validateCustomer,validateTransportPhone,iso,shortId,sha256,accessToken,noSecret,txt,addDays} from './core.js';
-import {savePlan,authorizedPlan,claimPlan,releasePlan,saveOrder} from './db.js';
-import {availability,provider,bookingStatus,upstream} from './provider.js';
-import {createOrder,runSaga,refreshOrder} from './orders.js';
-import {loadOrder} from './db.js';
+import {fail,asDate,validTime,validateItem,validateCustomer,validateTransportPhone,iso,shortId,sha256,accessToken,noSecret,txt,addDays} from './core.ts';
+import {savePlan,authorizedPlan,claimPlan,releasePlan,saveOrder} from './db.ts';
+import {availability,provider,bookingStatus,upstream} from './provider.ts';
+import {createOrder,runSaga,refreshOrder} from './orders.ts';
+import {loadOrder} from './db.ts';
 export function validatePlan(p){if(!p||!txt(p.title).trim()||txt(p.title).length>100||!asDate(p.startDate)||!asDate(p.endDate)||p.endDate<p.startDate)fail(400,'Judul dan rentang tanggal itinerary tidak valid');if(!Array.isArray(p.activities)||p.activities.length>30)fail(400,'Maksimal 30 aktivitas');for(let a of p.activities){if(!a.id)a.id=shortId('AC-');if(!['hotel','wisata','transport','custom'].includes(a.type)||!txt(a.title).trim()||txt(a.title).length>130||!asDate(a.date)||a.date<p.startDate||a.date>p.endDate)fail(400,'Aktivitas itinerary tidak valid');if(!validTime(a.startTime,a.endTime)||!a.startTime||!a.endTime)fail(400,'Jam aktivitas harus HH:MM dan selesai setelah mulai');if(a.sourceItem){if(a.type==='custom'||a.sourceItem.type!==a.type)fail(400,'Referensi provider tidak sesuai');validateItem(a.sourceItem);if((a.type==='hotel'&&a.date!==a.sourceItem.checkIn)||(a.type==='wisata'&&a.date!==a.sourceItem.visitDate)||(a.type==='transport'&&a.date!==a.sourceItem.startDate))fail(400,'Tanggal aktivitas tidak cocok dengan tanggal reservasi')}}return p}
 export async function createPlan(env,input){let p=validatePlan(input);p.activities=p.activities.map(x=>{let {orderId,providerBookingId,bookingStatus,syncError,...safe}=x;return safe});let token=accessToken();p.id=shortId('PL-');p.secretHash=await sha256(token);p.updatedAt=iso();await savePlan(env,p);return {itinerary:noSecret(p),accessToken:token}}
 export async function getPlan(env,id,req){return noSecret(await authorizedPlan(env,id,req))}

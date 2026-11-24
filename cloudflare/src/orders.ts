@@ -1,6 +1,6 @@
-import {fail,validateInput,iso,shortId,accessToken,sha256,status,recompute,noSecret,n,rows,txt} from './core.js';
-import {availability,bookProvider,bookingStatus,cancelHotel,upstream,provider} from './provider.js';
-import {saveOrder,authorizedOrder} from './db.js';
+import {fail,validateInput,iso,shortId,accessToken,sha256,status,recompute,noSecret,n,rows,txt} from './core.ts';
+import {availability,bookProvider,bookingStatus,cancelHotel,upstream,provider} from './provider.ts';
+import {saveOrder,authorizedOrder} from './db.ts';
 export async function quote(env,input){validateInput(input);let items=[],total=0;for(let item of input.items){let amount=await availability(env,item);items.push({item,amount});total+=amount}return {items,total,currency:'IDR',simulation:input.items.some(x=>x.type==='transport'),note:'Harga dicek ulang saat pemesanan; pembayaran simulasi.'}}
 export async function createOrder(env,customer,items,props={}){
   // Writes durable order before any provider call. Provider booking outcomes are never inferred.
