@@ -22,13 +22,13 @@ Perintah di atas menyiapkan **pengembangan lokal**, bukan D1 produksi. Jangan me
 
 | Path | Tanggung jawab |
 |---|---|
-| `src/index.js` | Router API/handler Worker dan Static Assets |
-| `src/core.js` | Validasi, pemetaan status/wilayah, fungsi domain |
-| `src/provider.js` | Adapter REST Hotel/Wisata/JogjaTrans |
-| `src/db.js` | Penyimpanan dan akses D1 |
-| `src/plans.js` | Penyusunan itinerary dan jadwal |
-| `src/orders.js` | Quote, order, sinkronisasi dan rincian |
-| `src/packages.js` | Paket curated serta itinerary paket |
+| `src/index.ts` | Router API/handler Worker dan Static Assets |
+| `src/core.ts` | Validasi, pemetaan status/wilayah, fungsi domain |
+| `src/provider.ts` | Adapter REST Hotel/Wisata/JogjaTrans |
+| `src/db.ts` | Penyimpanan dan akses D1 |
+| `src/plans.ts` | Penyusunan itinerary dan jadwal |
+| `src/orders.ts` | Quote, order, sinkronisasi dan rincian |
+| `src/packages.ts` | Paket curated serta itinerary paket |
 | `web/` | Frontend statis dengan penanda mode pratinjau |
 | `templates/` | Dua template curated |
 | `migrations/` | Skema D1 |

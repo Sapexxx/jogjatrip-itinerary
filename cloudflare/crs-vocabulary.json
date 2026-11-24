@@ -9,7 +9,7 @@
     "aliases": "skos:altLabel"
   },
   "name": "JogjaTrip Common Representational System (CRS)",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "status": "DRAFT - disusun dari kode keempat repo pada audit 23 November 2026. Ganti namespace example.org dengan namespace kelompok sebelum dikumpulkan.",
   "principles": [
     "CRS bukan aplikasi atau database perantara. Ini kamus bersama; tiap layanan memetakan istilahnya sendiri ke kamus ini.",
@@ -125,8 +125,8 @@
     {"conceptId": "common:customer-phone", "hotel": ["guestPhone"], "wisata": ["phone", "customer.phone"], "transport": ["customer_phone (input rental, tidak dikembalikan API)"], "relation": "sameRole"},
     {"conceptId": "common:reservation-state", "hotel": ["status"], "wisata": ["status"], "transport": ["status"], "relation": "relatedMatch",
      "notes": "Lihat statusMappings. Status reservasi dan status pembayaran dipisah."},
-    {"conceptId": "common:payment-state", "hotel": ["payment.status"], "wisata": ["status (diturunkan)"], "transport": [], "relation": "relatedMatch",
-     "notes": "Transport tidak memiliki pembayaran; paymentState = not_applicable."},
+    {"conceptId": "common:payment-state", "hotel": ["payment.status"], "wisata": ["status (diturunkan)"], "transport": ["paymentState (vehicle_rental)"], "relation": "relatedMatch",
+     "notes": "Transport terdiri dari dua layanan: transport_trip (TR-) tidak memproses pembayaran, sehingga not_applicable; vehicle_rental (RT-) memiliki paymentState unpaid/paid, dan paid hanya setelah staf memverifikasi penerimaan dana secara manual saat serah terima. Tidak ada pembayaran online atau payment gateway."},
     {"conceptId": "common:currency", "hotel": ["IDR"], "wisata": ["IDR"], "transport": ["currency"], "relation": "exactConcept"},
     {"conceptId": "common:simulation-flag", "hotel": [], "wisata": [], "transport": ["simulation", "priceType=SIMULATED"], "relation": "transportOnly",
      "notes": "Harga dan kuota Transport adalah simulasi; Itinerary harus menampilkannya sebagai estimasi."},
@@ -158,9 +158,11 @@
       "values": ["unpaid", "paid", "refunded", "partially_refunded", "expired", "not_applicable"],
       "hotel": {"unpaid": "unpaid", "paid": "paid", "refunded": "refunded", "partially_refunded": "partially_refunded"},
       "wisata": {"PENDING": "unpaid", "PAID": "paid", "REFUNDED": "refunded", "EXPIRED": "expired"},
-      "transport": {"*": "not_applicable"}
+      "transport": {"*": "not_applicable"},
+      "transportTrip": {"*": "not_applicable"},
+      "vehicleRental": {"unpaid": "unpaid", "paid": "paid"}
     },
-    "aggregatorNote": "Itinerary (main.go statusCanonical) memetakan PAID -> CONFIRMED dan tidak mengenal recorded/contacted (jatuh ke UNKNOWN). Selaraskan dengan tabel ini saat adapter Transport ditambahkan: reservasi 'reserved' = CONFIRMED, 'requested'/'in_review'/'awaiting_payment' = PENDING."
+    "aggregatorNote": "Itinerary (main.go statusCanonical) memetakan PAID -> CONFIRMED dan tidak mengenal recorded/contacted (jatuh ke UNKNOWN). Selaraskan dengan tabel ini saat adapter Transport ditambahkan: reservasi 'reserved' = CONFIRMED, 'requested'/'in_review'/'awaiting_payment' = PENDING. PaymentState HARUS dipetakan berdasarkan entityType: transport_trip tetap not_applicable; vehicle_rental unpaid/paid adalah status penerimaan dana yang dicatat staf, bukan pembayaran gateway."
   },
 
   "nonEquivalences": [
@@ -169,6 +171,8 @@
     "checkIn tidak sama dengan visit_date maupun travelDate",
     "guests tidak selalu sama dengan qty atau passengers",
     "pricePerNight tidak sama dengan harga tiket per orang maupun tarif rental per hari",
+    "status paid (rental) berarti verifikasi pembayaran oleh staf saat serah terima; bukan bukti payment gateway online",
+    "pilihan add-on Hotel/Wisata yang tersimpan di JogjaTrans adalah minat, bukan pemesanan pada penyedia mitra",
     "perPerson=true (harga per penumpang) tidak sama dengan perPerson=false (harga per perjalanan)",
     "confirmed (Hotel) tidak sama dengan PAID (Wisata); recorded (Transport) bukan reservasi yang sudah dikonfirmasi",
     "hotel cancelled tidak sama dengan wisata REFUNDED",
