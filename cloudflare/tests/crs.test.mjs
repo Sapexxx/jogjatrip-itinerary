@@ -45,3 +45,17 @@ test('GET /api/semantic returns the exact shared vocabulary version',async()=>{
   assert.equal(r.status,200);
   assert.deepEqual(await r.json(),vocabulary);
 });
+
+test('CRS v0.1.1 separates rental payment from trip payment and reservation state',()=>{
+  const payment=vocabulary.statusMappings.paymentState;
+  assert.deepEqual(payment.transportTrip,{'*':'not_applicable'});
+  assert.deepEqual(payment.transport,payment.transportTrip);
+  assert.deepEqual(payment.vehicleRental,{unpaid:'unpaid',paid:'paid'});
+  assert.equal(payment.vehicleRental['*'],undefined);
+  assert.equal(vocabulary.statusMappings.reservationState.transport.recorded,'requested');
+  assert.equal(vocabulary.statusMappings.reservationState.transport.contacted,'in_review');
+  assert.equal(status('recorded'),'PENDING');
+  assert.equal(status('contacted'),'PENDING');
+  assert.ok(vocabulary.nonEquivalences.some(x=>x.includes('payment gateway online')));
+  assert.ok(vocabulary.nonEquivalences.some(x=>x.includes('minat, bukan pemesanan')));
+});
