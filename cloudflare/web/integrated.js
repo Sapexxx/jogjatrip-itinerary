@@ -1,6 +1,6 @@
 'use strict';
 // Integrated trip builder: plans are JogjaTrip-owned, bookings provider-owned.
-const integrated={hotelId:'',roomId:'',date:'',people:2,quote:null,rec:[],recLoaded:false,source:'catalog',vehicles:[],vehicleError:'',vehicleLoaded:false};
+const integrated={hotelId:'',roomId:'',date:'',people:2,quote:null,rec:[],recLoaded:false,source:'catalog',vehicles:[],vehicleError:'',vehicleLoaded:false,vehicleLoading:false,vehicleRequest:0,rental:{startDate:'',endDate:'',withDriver:false,type:'all',category:'all'}};
 const ie=id=>document.getElementById(id);
 const irup=n=>money(n);
 const idate=()=>ie('ibDate').value||tripDate();
@@ -26,27 +26,61 @@ function integratedInit(){
  const box=ie('integratedBuilder');if(!box)return;
  box.innerHTML=`<div class="ib-intro"><div><span class="section-tag">BUAT PERJALANAN SESUAI KEBUTUHAN</span><h2>Gabungkan hotel, wisata, dan kendaraan.</h2><p>Semua pilihan layanan bersumber dari API JogjaStay, Wisata Jogja, dan JogjaTrans. Rencana dapat disimpan tanpa checkout.</p></div><span class="ib-step-tag">1. Pilih &nbsp; 2. Susun &nbsp; 3. Pesan</span></div>
  <div class="ib-toolbar"><label>Mulai perjalanan<input id="ibDate" type="date"></label><label>Durasi menginap<select id="ibNights"><option value="1">2 hari / 1 malam</option><option value="2" selected>3 hari / 2 malam</option><option value="4">5 hari / 4 malam</option><option value="6">7 hari / 6 malam</option></select></label><label>Wisatawan<input id="ibPeople" type="number" min="1" max="20" value="2"></label><label>Budget maksimal (Rp)<input id="ibBudget" type="number" min="0" step="50000" placeholder="Opsional"></label></div>
- <div class="ib-columns"><div class="ib-catalog"><div class="ib-tabs"><button class="ib-tab active" data-ib-tab="hotel">1. Pilih Hotel</button><button class="ib-tab" data-ib-tab="wisata">2. Pilih Wisata</button><button class="ib-tab" data-ib-tab="transport">3. Pilih Transportasi</button></div><div id="ibHotelOptions"></div><div id="ibWisataOptions" hidden></div><div id="ibTransportOptions" hidden></div></div><div class="ib-workspace"><div class="ib-workspace-head"><span class="section-tag">ITINERARY SAYA</span><h3 id="ibTitle">Perjalanan belum dirancang</h3><p>Tambahkan hotel atau wisata untuk menyusun jadwal harian.</p></div><div id="ibDays"></div><div id="ibSelected" class="ib-selected"></div><div class="ib-btns"><button class="outlinewide" id="ibSave">Simpan itinerary</button><button class="outlinewide" id="ibSync">Sinkronkan status booking</button><button class="dark wide" id="ibQuote">Periksa harga & stok</button></div><div id="ibQuoteResult"></div><div class="ib-customer" id="ibCustomer" hidden><h4>Detail pemesan</h4><div class="fields"><label>Nama<input id="ibName" autocomplete="name"></label><label>Email<input id="ibEmail" type="email" autocomplete="email"></label><label>Nomor telepon<input id="ibPhone" autocomplete="tel"></label></div><button class="primary wide" id="ibBook">Konfirmasi booking ke penyedia</button><small>Demo akademik. Provider menyimpan reservasi asli. Pembayaran tidak riil. Jangan ulang checkout jika status UNKNOWN.</small></div><p id="ibHint" class="ib-hint">Aktivitas pribadi dapat ditambahkan melalui Pengaturan agenda manual.</p></div></div>`;
+ <div class="ib-columns"><div class="ib-catalog"><div class="ib-tabs"><button class="ib-tab active" data-ib-tab="hotel">1. Pilih Hotel</button><button class="ib-tab" data-ib-tab="wisata">2. Pilih Wisata</button><button class="ib-tab" data-ib-tab="transport">3. Pilih Transportasi</button></div><div id="ibHotelOptions"></div><div id="ibWisataOptions" hidden></div><div id="ibTransportOptions" hidden></div></div><div class="ib-workspace"><div class="ib-workspace-head"><span class="section-tag">ITINERARY SAYA</span><h3 id="ibTitle">Perjalanan belum dirancang</h3><p>Tambahkan hotel, wisata, atau transportasi untuk menyusun jadwal harian.</p></div><div id="ibDays"></div><div id="ibSelected" class="ib-selected"></div><div class="ib-btns"><button class="outlinewide" id="ibSave">Simpan itinerary</button><button class="outlinewide" id="ibSync">Sinkronkan status booking</button><button class="dark wide" id="ibQuote">Periksa harga & stok</button></div><div id="ibQuoteResult"></div><div class="ib-customer" id="ibCustomer" hidden><h4>Detail pemesan</h4><div class="fields"><label>Nama<input id="ibName" autocomplete="name"></label><label>Email<input id="ibEmail" type="email" autocomplete="email"></label><label>Nomor telepon<input id="ibPhone" autocomplete="tel"></label></div><button class="primary wide" id="ibBook">Konfirmasi booking ke penyedia</button><small>Demo akademik. Provider menyimpan reservasi asli. Pembayaran tidak riil. Jangan ulang checkout jika status UNKNOWN.</small></div><p id="ibHint" class="ib-hint">Aktivitas pribadi dapat ditambahkan melalui Pengaturan agenda manual.</p></div></div>`;
  ie('ibDate').value=$('#planStart').value||tripDate();ie('ibDate').min=dateStr(new Date());
- ['ibDate','ibNights','ibPeople','ibBudget'].forEach(id=>ie(id).onchange=()=>{integrated.quote=null;integrated.vehicleLoaded=false;integrated.vehicles=[];integratedRender()});
- document.querySelectorAll('[data-ib-tab]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-ib-tab]').forEach(x=>x.classList.toggle('active',x===b));ie('ibHotelOptions').hidden=b.dataset.ibTab!=='hotel';ie('ibWisataOptions').hidden=b.dataset.ibTab!=='wisata';ie('ibTransportOptions').hidden=b.dataset.ibTab!=='transport';if(b.dataset.ibTab==='transport'&&!integrated.vehicleLoaded)integratedLoadVehicles()});
+ ['ibDate','ibNights','ibPeople','ibBudget'].forEach(id=>ie(id).onchange=()=>{integrated.quote=null;if(id==='ibDate'||id==='ibNights'){integratedResetRental();if(!ie('ibTransportOptions').hidden)integratedLoadVehicles()}integratedRender()});
+ document.querySelectorAll('[data-ib-tab]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-ib-tab]').forEach(x=>x.classList.toggle('active',x===b));ie('ibHotelOptions').hidden=b.dataset.ibTab!=='hotel';ie('ibWisataOptions').hidden=b.dataset.ibTab!=='wisata';ie('ibTransportOptions').hidden=b.dataset.ibTab!=='transport';if(b.dataset.ibTab==='transport'&&!integrated.vehicleLoaded&&!integrated.vehicleLoading){if(!integrated.rental.startDate)integratedResetRental();integratedLoadVehicles()}});
  ie('ibSave').onclick=async()=>{await integratedSave()};
  ie('ibQuote').onclick=integratedQuote;
  ie('ibBook').onclick=integratedBook;
  ie('ibSync').onclick=integratedSync;
  integratedRender();
 }
+function integratedResetRental(start=idate(),end=endDate(start,inights())){
+ Object.assign(integrated.rental,{startDate:start,endDate:end});
+ integrated.vehicleRequest++;integrated.vehicleLoaded=false;integrated.vehicleLoading=false;integrated.vehicleError='';integrated.vehicles=[];
+}
+function integratedOpenTransport({fromHome=false,startDate,endDate:finish,people}={}){
+ page('journey');
+ if(fromHome){
+  const start=startDate||tripDate();
+  ie('ibDate').value=start;
+  if(people)ie('ibPeople').value=people;
+  else ie('ibPeople').value=guests();
+  if(!startDate)ie('ibNights').value=String(nights());
+  integratedResetRental(start,finish||endDate(start,inights()));
+ }
+ document.querySelector('[data-ib-tab="transport"]')?.click();
+ ie('integratedBuilder')?.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function integratedRentalDays(r=integrated.rental){return Math.round((Date.parse(r.endDate+'T00:00:00Z')-Date.parse(r.startDate+'T00:00:00Z'))/86400000)+1}
 async function integratedLoadVehicles(){
- const el=ie('ibTransportOptions');if(!el)return;
- el.textContent='Mengambil ketersediaan kendaraan dari JogjaTrans…';
- integrated.vehicleLoaded=true;
+ const r={...integrated.rental},seq=++integrated.vehicleRequest;
+ integrated.vehicles=[];integrated.vehicleError='';integrated.vehicleLoaded=false;
+ if(!r.startDate||!r.endDate||r.startDate<dateStr(new Date())||!Number.isInteger(integratedRentalDays(r))||integratedRentalDays(r)<1||integratedRentalDays(r)>30){integrated.vehicleLoading=false;integrated.vehicleError='Pilih tanggal sewa mulai hari ini dengan durasi 1–30 hari.';integratedRender();return}
+ integrated.vehicleLoading=true;integratedRender();
  try{
-  const params=new URLSearchParams({startDate:idate(),endDate:endDate(idate(),Math.max(0,inights()-1)),withDriver:'false'});
+  const params=new URLSearchParams({startDate:r.startDate,endDate:r.endDate,withDriver:String(r.withDriver),type:r.type,category:r.category});
   const result=await request('/api/catalog/vehicles?'+params);
-  integrated.vehicles=result.items||[];
-  integrated.vehicleError='';
- }catch(e){integrated.vehicles=[];integrated.vehicleError=e.message;}
- integratedRender();
+  if(seq!==integrated.vehicleRequest)return;
+  if(result.provider!=='transport'||!Array.isArray(result.items))throw Error('Format respons JogjaTrans tidak sesuai');
+  integrated.vehicles=result.items;
+  integrated.vehicleLoaded=true;
+ }catch(e){if(seq!==integrated.vehicleRequest)return;integrated.vehicles=[];integrated.vehicleError=e.message;}
+ finally{if(seq===integrated.vehicleRequest){integrated.vehicleLoading=false;integratedRender()}}
+}
+function integratedTransportSummary(){
+ const el=ie('v4TransportSummary'),check=ie('v4UseTransport');if(!el||!check)return;
+ const acts=planState.activities.filter(a=>a.sourceItem?.type==='transport');
+ if(!acts.length){el.hidden=true;el.innerHTML='';return}
+ check.checked=true;el.hidden=false;
+ el.innerHTML='<strong>'+acts.length+' kendaraan dipilih</strong>'+acts.map(a=>'<small>'+escapeHTML(a.title)+' · '+integratedRentalDays(a.sourceItem)+' hari · '+(a.sourceItem.withDriver?'Dengan sopir':'Lepas kunci')+'</small>').join('')+'<div class="v4-transport-actions"><button type="button" data-transport-change>Ubah pilihan</button>'+(acts.some(a=>!a.orderId)?'<button type="button" data-transport-remove>Hapus pilihan</button>':'')+'</div>';
+ el.querySelector('[data-transport-change]').onclick=()=>integratedOpenTransport();
+ el.querySelector('[data-transport-remove]')?.addEventListener('click',()=>{planState.activities=planState.activities.filter(a=>a.sourceItem?.type!=='transport'||a.orderId);integrated.quote=null;check.checked=planState.activities.some(a=>a.sourceItem?.type==='transport');integratedRender()});
+}
+function integratedTransportPreference(){
+ const check=ie('v4UseTransport');if(!check)return;
+ check.onchange=()=>{if(!check.checked){const existing=planState.activities.filter(a=>a.sourceItem?.type==='transport');if(existing.some(a=>a.orderId)){check.checked=true;toast('Kendaraan yang telah memiliki pesanan tidak dapat dihapus');return}if(existing.length&&!confirm('Hapus pilihan transportasi dari itinerary?')){check.checked=true;return}planState.activities=planState.activities.filter(a=>a.sourceItem?.type!=='transport');integrated.quote=null;integratedRender()}else{integratedOpenTransport({fromHome:true})}};
 }
 function ihotelRegion(h){return v4HotelRegion(h)}
 function idestinationRegion(d){return v4DestinationRegion(d)}
@@ -64,20 +98,34 @@ function integratedRender(){
  ie('ibWisataOptions').querySelectorAll('[data-ib-wisata]').forEach(b=>b.onclick=async()=>{const d=recommendations.find(x=>String(x.id)===b.dataset.ibWisata);if(!d)return;const taken=planState.activities.filter(a=>a.sourceItem?.type==='wisata').length;const suggestedDay=Math.min(inights(),Math.floor(taken/2));const slot=await jtChooseSchedule({title:'wisata '+d.name,date:endDate(idate(),suggestedDay),minDate:idate(),maxDate:endDate(idate(),inights()),info:jtHoursInfo(d)});if(!slot)return;const a={type:'wisata',title:d.name,date:slot.date,startTime:slot.startTime,endTime:slot.endTime,region:idestinationRegion(d),notes:'Jam agenda dipilih pengguna; bukan slot provider yang terkonfirmasi',sourceItem:{type:'wisata',destinationId:Number(d.id),visitDate:slot.date,quantity:ipeople(),tier:'base',plannedStartTime:slot.startTime,plannedEndTime:slot.endTime}};planState.activities.push(a);integrated.quote=null;integratedRender();toast('Wisata ditambahkan ke itinerary — belum dipesan')});
  const transportBox=ie('ibTransportOptions');
  if(transportBox){
-  transportBox.innerHTML='<p class="ib-caption">Kendaraan JogjaTrans, harga simulasi per periode sewa. Tidak termasuk pembayaran nyata.</p>'+
-   '<button class="outlinewide" id="ibReloadVehicles">Perbarui stok kendaraan</button>'+
-   (integrated.vehicleError?'<p>'+escapeHTML(integrated.vehicleError)+'</p>':'')+
-   integrated.vehicles.slice(0,35).map(v=>'<div class="ib-attraction"><div><strong>'+escapeHTML(v.name||v.id)+'</strong><small>'+escapeHTML(v.category||v.type||'Kendaraan')+' · '+escapeHTML(String(v.seats||''))+' kursi</small><span>'+money(v.totalPrice)+' · '+escapeHTML(String(v.days||inights()))+' hari · simulasi</span></div><button data-ib-vehicle="'+escapeHTML(String(v.id))+'" '+(!v.available?'disabled':'')+'>'+(v.available?'Tambah':'Habis')+'</button></div>').join('');
-  transportBox.querySelector('#ibReloadVehicles').onclick=()=>{integrated.vehicleLoaded=false;integratedLoadVehicles()};
+  const r=integrated.rental,opts=(list,current)=>list.map(([value,label])=>'<option value="'+escapeHTML(value)+'" '+(value===current?'selected':'')+'>'+escapeHTML(label)+'</option>').join('');
+  const types=[['all','Semua kendaraan'],['motor','Motor'],['mobil','Mobil']];
+  const categories=[['all','Semua kategori'],['matic','Matic'],['maxi','Maxi'],['retro','Retro'],['city-car','City car'],['hatchback','Hatchback'],['sedan','Sedan'],['mpv','MPV'],['suv','SUV'],['premium','Premium'],['van','Van']];
+  transportBox.innerHTML='<p class="ib-caption">Katalog langsung JogjaTrans. Tanggal akhir termasuk hari sewa. Tarif dan stok merupakan simulasi akademik.</p>'+
+   '<div class="ib-rental-filters"><label>Mulai sewa<input type="date" id="ibRentStart" min="'+dateStr(new Date())+'" value="'+escapeHTML(r.startDate||idate())+'"></label><label>Selesai sewa<input type="date" id="ibRentEnd" min="'+escapeHTML(r.startDate||idate())+'" value="'+escapeHTML(r.endDate||endDate(idate(),inights()))+'"></label><label>Jenis kendaraan<select id="ibRentType">'+opts(types,r.type)+'</select></label><label>Sopir<select id="ibRentDriver">'+opts([['false','Lepas kunci'],['true','Dengan sopir']],String(r.withDriver))+'</select></label><label>Kategori<select id="ibRentCategory">'+opts(categories,r.category)+'</select></label><button type="button" class="outlinewide ib-rental-submit" id="ibReloadVehicles" '+(integrated.vehicleLoading?'disabled':'')+'>Cari kendaraan & periksa stok</button></div>'+
+   '<p class="ib-rental-status '+(integrated.vehicleError?'error':'')+'" role="status">'+escapeHTML(integrated.vehicleLoading?'Mengambil katalog JogjaTrans…':integrated.vehicleError|| (integrated.vehicleLoaded?integrated.vehicles.length+' model kendaraan ditemukan.':'Tentukan filter, lalu cari kendaraan.'))+'</p>'+
+   '<div class="ib-rental-results">'+integrated.vehicles.map(v=>{
+    const name=v.name||v.id,id=String(v.id),selected=planState.activities.some(a=>a.sourceItem?.type==='transport'&&a.sourceItem.vehicleId===id&&a.sourceItem.startDate===r.startDate&&a.sourceItem.endDate===r.endDate&&a.sourceItem.withDriver===r.withDriver);
+    const disabled=selected||v.available!==true||Number(v.unitsAvailable)<1;
+    return '<div class="ib-attraction"><div><strong>'+escapeHTML(name)+'</strong><small>'+escapeHTML([v.type,v.category,v.transmission,v.seats?String(v.seats)+' kursi':''].filter(Boolean).join(' · '))+'</small><span>'+money(v.dailyPrice)+' / hari'+(r.withDriver?' + sopir '+money(v.driverDailyPrice)+' / hari':'')+'</span><span><b>'+money(v.totalPrice)+'</b> · '+escapeHTML(String(v.days))+' hari · simulasi · '+escapeHTML(String(v.unitsAvailable))+' unit</span></div><button type="button" data-ib-vehicle="'+escapeHTML(id)+'" '+(disabled?'disabled':'')+'>'+(selected?'Dipilih':disabled?'Habis':'Pilih kendaraan')+'</button></div>';
+   }).join('')+'</div>';
+  for(const [id,key] of [['ibRentStart','startDate'],['ibRentEnd','endDate'],['ibRentType','type'],['ibRentDriver','withDriver'],['ibRentCategory','category']]){
+   ie(id).onchange=()=>{r[key]=key==='withDriver'?ie(id).value==='true':ie(id).value;if(key==='type'&&r.type==='motor')r.withDriver=false;if(key==='withDriver'&&r.withDriver&&r.type==='motor')r.type='mobil';if(key==='type')r.category='all';integrated.vehicleRequest++;integrated.vehicleLoading=false;integrated.vehicleLoaded=false;integrated.vehicles=[];integrated.vehicleError='';integratedRender()};
+  }
+  ie('ibReloadVehicles').onclick=integratedLoadVehicles;
   transportBox.querySelectorAll('[data-ib-vehicle]').forEach(btn=>btn.onclick=async()=>{
-   const v=integrated.vehicles.find(x=>String(x.id)===btn.dataset.ibVehicle);if(!v)return;
-   const slot=await jtChooseSchedule({title:'pengambilan '+(v.name||'kendaraan'),date:idate(),minDate:idate(),maxDate:endDate(idate(),inights()),info:'Jam pengambilan merupakan rencana pengguna. Rental diproses oleh JogjaTrans.'});
-   if(!slot)return;
-   const days=Number(v.days)||inights();
-   planState.activities.push({type:'transport',title:'Sewa '+v.name,date:slot.date,startTime:slot.startTime,endTime:slot.endTime,notes:'Harga dan stok rental adalah simulasi',sourceItem:{type:'transport',vehicleId:v.id,startDate:slot.date,endDate:endDate(slot.date,Math.max(0,days-1)),withDriver:false,plannedStartTime:slot.startTime,plannedEndTime:slot.endTime}});
-   integrated.quote=null;integratedRender();toast('Kendaraan ditambahkan, belum dipesan');
+   const v=integrated.vehicles.find(x=>String(x.id)===btn.dataset.ibVehicle);if(!v||v.available!==true||Number(v.unitsAvailable)<1)return;
+   const chosen={...r};
+   const slot=await jtChooseSchedule({title:'pengambilan '+(v.name||v.id),date:chosen.startDate,minDate:chosen.startDate,maxDate:chosen.startDate,info:'Jam pengambilan adalah rencana pribadi. Sewa mengikuti tanggal yang sudah diperiksa melalui JogjaTrans.'});if(!slot)return;
+   const item={type:'transport',vehicleId:String(v.id),startDate:chosen.startDate,endDate:chosen.endDate,withDriver:chosen.withDriver,plannedStartTime:slot.startTime,plannedEndTime:slot.endTime};
+   if(planState.activities.some(a=>a.sourceItem?.type==='transport'&&a.sourceItem.vehicleId===item.vehicleId&&a.sourceItem.startDate===item.startDate&&a.sourceItem.endDate===item.endDate&&a.sourceItem.withDriver===item.withDriver)){toast('Kendaraan ini sudah dipilih untuk periode tersebut');return}
+   if(planState.activities.length>=30){toast('Maksimal 30 aktivitas');return}
+   planState.activities.push({type:'transport',title:'Sewa '+(v.name||v.id),date:chosen.startDate,startTime:slot.startTime,endTime:slot.endTime,notes:'Harga dan stok rental simulasi; '+(chosen.withDriver?'dengan sopir':'lepas kunci'),sourceItem:item});
+   if(ie('v4UseTransport'))ie('v4UseTransport').checked=true;
+   integrated.quote=null;integratedRender();toast('Kendaraan ditambahkan ke itinerary, belum dipesan');
   });
  }
+ integratedTransportSummary();
  const acts=planState.activities;
  const tripStart=acts.map(a=>a.date).concat([idate()]).sort()[0];const tripEnd=acts.map(a=>a.sourceItem?.checkOut||a.sourceItem?.endDate||a.date).concat([endDate(idate(),inights())]).sort().at(-1);
  ie('ibTitle').textContent=$('#planTitle').value||'Perjalanan Yogyakarta';
@@ -109,6 +157,7 @@ async function integratedQuote(){try{if(!planState.activities.some(a=>a.sourceIt
 async function integratedBook(){if(!integrated.quote?.available)return;if(!ie('ibName').value.trim()||!ie('ibEmail').value.includes('@')||(planState.activities.some(x=>x.sourceItem?.type==='transport')&&!/^[+0-9 ()-]{9,20}$/.test(ie('ibPhone').value.trim()))){toast('Lengkapi nama dan email');return}if(!confirm('Konfirmasi booking demo ke penyedia? Rental JogjaTrans merupakan simulasi.'))return;const b=ie('ibBook');b.disabled=true;try{const res=await request(`/api/itineraries/${encodeURIComponent(planState.id)}/book`,{method:'POST',headers:{'X-Plan-Token':planState.accessToken},body:JSON.stringify({customer:{name:ie('ibName').value,email:ie('ibEmail').value,phone:ie('ibPhone').value}})});state.orders.unshift({id:res.order.id,token:res.accessToken});localStorage.setItem('jt_orders',JSON.stringify(state.orders));planState.activities=res.itinerary?.activities||planState.activities;integrated.quote=null;integratedRender();ie('ibQuoteResult').innerHTML=`<div class="ib-cost"><h4>Pesanan ${escapeHTML(res.order.id)} · ${escapeHTML(res.order.status)}</h4><p>Referensi tercatat. Periksa detail dan sinkronisasi pada halaman Pesanan.</p></div>`;$('#lookupId').value=res.order.id;$('#lookupToken').value=res.accessToken;toast('Pesanan '+res.order.status+'. Jangan checkout ulang saat status UNKNOWN.')}catch(e){toast(e.message+' — Jika status tidak pasti, jangan checkout ulang; periksa order penyedia.')}finally{b.disabled=false}}
 async function integratedSync(){if(!planState.id){toast('Simpan itinerary terlebih dahulu');return}try{const r=await request(`/api/itineraries/${encodeURIComponent(planState.id)}/sync`,{method:'POST',headers:{'X-Plan-Token':planState.accessToken},body:'{}'});planState.activities=r.itinerary.activities;integratedRender();toast('Status booking diperiksa kembali ke penyedia')}catch(e){toast(e.message)}}
 integratedInit();
+integratedTransportPreference();
 // Main catalog is asynchronous. Refresh the integrated selection once loaded.
 const oldRenderCatalog=renderCatalog;
 renderCatalog=function(){oldRenderCatalog();if(ie('ibHotelOptions'))integratedRender()};
