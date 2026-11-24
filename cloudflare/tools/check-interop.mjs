@@ -73,7 +73,7 @@ const supplemental=[
   const a=array(d,'vehicles');assert.ok(a?.length&&a.every(x=>x.provider==='transport'&&x.entityType==='vehicle_rental'&&x.priceUnit==='day'&&x.resourceId),'Rental tidak mengikuti CRS');return a.length+' kendaraan CRS'
  })),
  probe('S5','PR-2: CRS katalog hotel',one('stay','/api/v1/hotels?city=Sleman',d=>{
-  const a=array(d,'hotels');assert.ok(a?.length&&a.every(x=>x.provider==='hotel'&&x.entityType==='hotel'&&x.resourceId&&x.regionId),'Katalog hotel belum memenuhi CRS');return a.length+' hotel CRS'
+  const a=array(d,'hotels');assert.ok(a?.length,'Katalog hotel kosong');const missing=a.filter(x=>x.provider!=='hotel'||x.entityType!=='lodging'||typeof x.resourceId!=='string'||!x.resourceId||!vocabulary.regions.some(r=>r.conceptId===x.regionId)||typeof x.name!=='string'||!x.name||x.currency!=='IDR'||x.priceUnit!=='night');assert.equal(missing.length,0,missing.length+'/'+a.length+' hotel belum memenuhi CRS lodging (provider, entityType, resourceId, regionId, name, currency, priceUnit)');return a.length+' hotel CRS lodging'
  })),
  probe('S6','PR-3: Capabilities booking Wisata',one('wisata','/api/v1/partner/capabilities',d=>{
   assert.ok(String(d?.bookingStatus||'').toUpperCase()==='PENDING'&&d?.durableStorage===true&&d?.idempotentBooking===true,'Booking belum siap (harus PENDING/true/true)');return 'PENDING, durableStorage=true, idempotentBooking=true'
