@@ -56,7 +56,7 @@ jobs:
               for(const q of c.requests)assert.equal(q.method,'GET');
             }
           }
-          assert.deepEqual(r.checks.filter(c=>c.status==='SKIP').map(c=>c.id),['2','6']);
+          assert.equal(r.checks.filter(c=>c.status==='SKIP').length,0,'All eight read-only routes must be attempted');
           console.log('PASS report integrity: all results accounted for; GET only');
           JS
           cat interop-report/summary.md >> "$GITHUB_STEP_SUMMARY"
