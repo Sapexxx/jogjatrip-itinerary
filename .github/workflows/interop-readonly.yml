@@ -3,17 +3,17 @@ name: PR-5 read-only interoperability audit
 on:
   workflow_dispatch:
   push:
-    branches:
-      - feat/interop-alignment-pr5
+    branches: [feat/interop-alignment-pr5, cloudflare-deploy]
     paths:
       - 'cloudflare/tools/check-interop.mjs'
       - '.github/workflows/interop-readonly.yml'
+      - 'cloudflare/crs-vocabulary.json'
   pull_request:
-    branches:
-      - cloudflare-deploy
+    branches: [cloudflare-deploy]
     paths:
       - 'cloudflare/tools/check-interop.mjs'
       - '.github/workflows/interop-readonly.yml'
+      - 'cloudflare/crs-vocabulary.json'
 
 permissions:
   contents: read
@@ -29,23 +29,42 @@ jobs:
           node-version: '22'
       - name: Syntax check
         run: node --check cloudflare/tools/check-interop.mjs
-      - name: Check eight live interoperability routes (GET only)
-        id: audit
+      - name: Audit eight live routes (GET only; FAIL remains a failure)
         run: node cloudflare/tools/check-interop.mjs
-      - name: Summarize verified results
+      - name: Validate and summarize report
         if: always()
         shell: bash
         run: |
-          if [ -f interop-report/summary.md ]; then
-            cat interop-report/summary.md >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "Interop report not generated; check the job logs." >> "$GITHUB_STEP_SUMMARY"
-          fi
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const r=JSON.parse(fs.readFileSync('interop-report/result.json','utf8'));
+          assert.equal(r.mode,'READ_ONLY_GET');
+          assert.equal(r.crsVersion,'0.1.1');
+          assert.equal(r.checks.length,8);
+          assert.deepEqual(r.checks.map(c=>c.id),['1','2','3','4','5','6','7','8']);
+          assert.equal(r.extras.length,8);
+          for(const [rows,s] of [[r.checks,r.summary],[r.extras,r.supplementalSummary]]){
+            assert.equal(s.total,rows.length);
+            for(const [status,key] of [['PASS','passed'],['FAIL','failed'],['SKIP','skipped']])
+              assert.equal(s[key],rows.filter(c=>c.status===status).length);
+            assert.equal(s.passed+s.failed+s.skipped,s.total);
+            for(const c of rows){
+              assert.ok(c.detail);
+              assert.ok(['PASS','FAIL','SKIP'].includes(c.status));
+              if(c.status==='SKIP')assert.equal(c.requests.length,0);
+              for(const q of c.requests)assert.equal(q.method,'GET');
+            }
+          }
+          assert.deepEqual(r.checks.filter(c=>c.status==='SKIP').map(c=>c.id),['2','6']);
+          console.log('PASS report integrity: all results accounted for; GET only');
+          JS
+          cat interop-report/summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload JSON and Markdown evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pr5-interop-readonly
           path: interop-report/
-          if-no-files-found: warn
-          retention-days: 7
+          if-no-files-found: error
+          retention-days: 30

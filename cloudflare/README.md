@@ -22,13 +22,13 @@ Perintah di atas menyiapkan **pengembangan lokal**, bukan D1 produksi. Jangan me
 
 | Path | Tanggung jawab |
 |---|---|
-| `src/index.js` | Router API/handler Worker dan Static Assets |
-| `src/core.js` | Validasi, pemetaan status/wilayah, fungsi domain |
-| `src/provider.js` | Adapter REST Hotel/Wisata/JogjaTrans |
-| `src/db.js` | Penyimpanan dan akses D1 |
-| `src/plans.js` | Penyusunan itinerary dan jadwal |
-| `src/orders.js` | Quote, order, sinkronisasi dan rincian |
-| `src/packages.js` | Paket curated serta itinerary paket |
+| `src/index.ts` | Router API/handler Worker dan Static Assets |
+| `src/core.ts` | Validasi, pemetaan status/wilayah, fungsi domain |
+| `src/provider.ts` | Adapter REST Hotel/Wisata/JogjaTrans |
+| `src/db.ts` | Penyimpanan dan akses D1 |
+| `src/plans.ts` | Penyusunan itinerary dan jadwal |
+| `src/orders.ts` | Quote, order, sinkronisasi dan rincian |
+| `src/packages.ts` | Paket curated serta itinerary paket |
 | `web/` | Frontend statis dengan penanda mode pratinjau |
 | `templates/` | Dua template curated |
 | `migrations/` | Skema D1 |
@@ -54,3 +54,13 @@ Perintah di atas menyiapkan **pengembangan lokal**, bukan D1 produksi. Jangan me
 - [Status dan keterbatasan](../docs/PROJECT_STATUS.md)
 
 **Keamanan:** jangan mengubah pembayaran simulasi menjadi klaim dana nyata; jangan menganggap jam itinerary adalah slot provider; jangan mengulang checkout dengan status `UNKNOWN` atau `PARTIAL` tanpa rekonsiliasi.
+
+## TypeScript Worker
+
+Backend Workers berada di `src/*.ts`, dengan entrypoint `src/index.ts`. Frontend `web/*.js` tetap JavaScript biasa, dan D1 serta konfigurasi provider tetap dipertahankan. Semua endpoint API dipertahankan untuk kompatibilitas dengan JogjaStay, Wisata Jogja dan JogjaTrans.
+
+- `npm test`: menjalankan pengujian API melalui Node.js 22 dengan dukungan type stripping untuk berkas .ts.
+- `npm run typecheck`: menjalankan TypeScript 5.9.3 compiler tanpa menghasilkan JS, melalui npx, tanpa mengubah dependency runtime dan lockfile.
+- `npx wrangler deploy --dry-run`: memastikan Wrangler dapat membundel entrypoint TypeScript.
+
+Migrasi ini sengaja mempertahankan skema D1, nilai `BOOKING_ENABLED=false`, serta kontrak JSON/REST. Tidak ada produk Cloudflare tambahan. Perlu pengembangan type-safety secara bertahap pada modul domain yang merupakan port langsung dari JavaScript.

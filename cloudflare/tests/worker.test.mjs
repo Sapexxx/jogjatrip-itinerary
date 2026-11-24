@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import worker from '../src/index.js';
+import worker from '../src/index.ts';
 class MemoryD1 {
  constructor(){this.orders=new Map();this.plans=new Map()}
  prepare(sql){const db=this;return {bind(...args){return {async first(){if(sql.includes('FROM jt_orders')){const o=db.orders.get(args[0]);return o?{payload:o.payload,secret_hash:o.secret_hash}:null}if(sql.includes('FROM jt_plans')){const p=db.plans.get(args[0]);return p?{payload:p.payload,secret_hash:p.secret_hash,order_lock:p.order_lock}:null}throw Error('unknown first '+sql)},async run(){if(sql.startsWith('INSERT INTO jt_orders')){const [id,payload,hash,created,updated]=args;db.orders.set(id,{payload,secret_hash:hash,created_at:created,updated_at:updated});return {meta:{changes:1}}}if(sql.startsWith('INSERT INTO jt_plans')){const [id,payload,hash,updated]=args;db.plans.set(id,{...(db.plans.get(id)||{}),payload,secret_hash:hash,updated_at:updated});return {meta:{changes:1}}}if(sql.startsWith('UPDATE jt_plans SET order_lock=?')){let [lock,id]=args;let p=db.plans.get(id);if(!p||p.order_lock)return {meta:{changes:0}};p.order_lock=lock;return {meta:{changes:1}}}if(sql.startsWith('UPDATE jt_plans SET order_lock=NULL')){let [id,lock]=args,p=db.plans.get(id);if(p?.order_lock===lock){p.order_lock=null;return {meta:{changes:1}}}return {meta:{changes:0}}}throw Error('unknown run '+sql)}}}}

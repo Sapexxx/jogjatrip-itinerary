@@ -17,7 +17,7 @@
 | Komponen | Lokasi |
 |---|---|
 | Worker name | `jogjatrip-itinerary` |
-| Entry point | `cloudflare/src/index.js` |
+| Entry point | `cloudflare/src/index.ts` |
 | Static assets | `cloudflare/web/` |
 | Configuration | `cloudflare/wrangler.jsonc` |
 | D1 binding | `DB` |

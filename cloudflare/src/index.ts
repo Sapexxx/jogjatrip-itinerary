@@ -1,11 +1,12 @@
-import {ApiError,fail,json,readJSON,noSecret,semanticVocabulary} from './core.js';
-import {catalog,recommendations} from './provider.js';
-import {quote,book,getOrder,syncOrder,details} from './orders.js';
-import {createPlan,getPlan,updatePlan,analyze,quotePlan,bookPlan,syncPlan} from './plans.js';
-import {authorizedPlan,authorizedOrder} from './db.js';
-import {templates,getPackage,expand,bookPackage,planFromOrder} from './packages.js';
-function parts(path){return path.split('/').filter(Boolean)}
-async function handle(req,env){if(!env.DB)fail(503,'Binding Cloudflare D1 belum dikonfigurasi');let u=new URL(req.url),p=parts(u.pathname),method=req.method;
+import type { WorkerEnv } from './types.ts';
+import {ApiError,fail,json,readJSON,noSecret,semanticVocabulary} from './core.ts';
+import {catalog,recommendations} from './provider.ts';
+import {quote,book,getOrder,syncOrder,details} from './orders.ts';
+import {createPlan,getPlan,updatePlan,analyze,quotePlan,bookPlan,syncPlan} from './plans.ts';
+import {authorizedPlan,authorizedOrder} from './db.ts';
+import {templates,getPackage,expand,bookPackage,planFromOrder} from './packages.ts';
+function parts(path: string){return path.split('/').filter(Boolean)}
+async function handle(req: Request,env: WorkerEnv): Promise<Response>{if(!env.DB)fail(503,'Binding Cloudflare D1 belum dikonfigurasi');let u=new URL(req.url),p=parts(u.pathname),method=req.method;
  if(p[0]!=='api')return env.ASSETS.fetch(req);
  if(p.length===2&&p[1]==='semantic'&&method==='GET')return json(semanticVocabulary);
  if(p.length===2&&p[1]==='health'&&method==='GET')return json({service:'JogjaTrip',status:'ok',storage:'cloudflare-d1',bookingEnabled:env.BOOKING_ENABLED==='true',providers:{hotel:!!env.HOTEL_API_URL,wisata:!!env.WISATA_API_URL,transport:!!env.TRANSPORT_API_URL},note:'Konfigurasi URL bukan pemeriksaan konektivitas provider'});
@@ -37,4 +38,4 @@ async function handle(req,env){if(!env.DB)fail(503,'Binding Cloudflare D1 belum 
  }
  fail(404,'Endpoint tidak tersedia')
 }
-export default {async fetch(request,env){try{return await handle(request,env)}catch(err){if(err instanceof ApiError)return json({error:err.message},err.code);console.error('Worker error',err?.stack||err);return json({error:'Kesalahan server. Periksa Workers Logs dan konfigurasi D1.'},503)}}};
+export default {async fetch(request: Request,env: WorkerEnv): Promise<Response>{try{return await handle(request,env)}catch(err){if(err instanceof ApiError)return json({error:err.message},err.code);console.error('Worker error',err?.stack||err);return json({error:'Kesalahan server. Periksa Workers Logs dan konfigurasi D1.'},503)}}};
