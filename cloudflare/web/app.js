@@ -11,7 +11,7 @@ function toast(t){const el=$('#toast');el.textContent=t;el.style.display='block'
 async function request(path,opts={}){let res;try{res=await fetch(path,{headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts})}catch(e){throw Error('Tidak dapat terhubung ke server JogjaTrip')};let data;try{data=await res.json()}catch{throw Error('Respons server bukan JSON')};if(!res.ok)throw Error(data.error||`HTTP ${res.status}`);return data}
 function page(name){$$('.page').forEach(x=>x.classList.toggle('active',x.id===name));$$('.navlink').forEach(x=>x.classList.toggle('active',x.dataset.page===name));if(name==='planner')renderCart();if(name==='orders')renderOrders();window.scrollTo({top:0,behavior:'smooth'})}
 $$('[data-page]').forEach(x=>x.onclick=()=>page(x.dataset.page));$('#heroPlan').onclick=()=>page('planner');
-$('[data-tab]').forEach(x=>x.onclick=()=>selectCatalogTab(x.dataset.tab));
+$$('[data-tab]').forEach(x=>x.onclick=()=>selectCatalogTab(x.dataset.tab));
 const region=()=>$('#region').value, tripDate=()=>$('#tripDate').value, guests=()=>Number($('#guests').value), nights=()=>Number($('#nights').value);
 function endDate(start,n){const d=new Date(start+'T12:00:00');d.setDate(d.getDate()+n);return dateStr(d)}
 // Keep the rental selection in the Explore catalog, just like Hotel and Wisata.
