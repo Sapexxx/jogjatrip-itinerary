@@ -34,7 +34,7 @@ flowchart TB
 
 **Go 1.23 pada branch main:** `net/http` menyajikan `web/`, adapter provider ada pada file Go; menyimpan order/itinerary ke file lokal untuk pengembangan atau Supabase bila konfigurasi lengkap.
 
-**Cloudflare Workers pada branch cloudflare-deploy:** `cloudflare/src/index.js` adalah entry point, `cloudflare/web/` berisi static assets, D1 menyediakan tabel `jt_orders`, `jt_plans`, `jt_packages`. `BOOKING_ENABLED=false` menjadi pengaman default. Kode JS merupakan adaptasi independen dari Go, **bukan Go yang dikompilasi langsung menjadi Worker**.
+**Cloudflare Workers pada branch cloudflare-deploy:** `cloudflare/src/index.ts` adalah entry point, `cloudflare/web/` berisi static assets, D1 menyediakan tabel `jt_orders`, `jt_plans`, `jt_packages`. `BOOKING_ENABLED=false` menjadi pengaman default. Kode TypeScript merupakan adaptasi independen dari Go, **bukan Go yang dikompilasi langsung menjadi Worker**.
 
 Keduanya tidak seharusnya aktif mengelola transaksi produksi secara bersamaan tanpa strategi migrasi, penyatuan data, dan evaluasi risiko duplikasi.
 
