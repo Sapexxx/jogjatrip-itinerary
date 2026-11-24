@@ -12,7 +12,7 @@ const health=await get('/api/health');
 if(health.providers?.transport!==true)throw Error('Transport provider is not configured in JogjaTrip');
 console.log('OK health: JogjaTrip reports transport provider configured');
 const semantic=await get('/api/semantic');
-if(semantic.version!=='0.1.0')throw Error('Unexpected CRS vocabulary version: '+semantic.version);
+if(semantic.version!=='0.1.1')throw Error('Unexpected CRS vocabulary version: '+semantic.version);
 console.log('OK semantic: CRS '+semantic.version);
 const dates=new URLSearchParams({startDate:offset(8),endDate:offset(9),withDriver:'false'});
 const catalog=await get('/api/catalog/vehicles?'+dates);

@@ -5,7 +5,7 @@ import {regionName,regionSlug,regionConcept,regionFromFields,status} from '../sr
 import worker from '../src/index.ts';
 
 test('CRS version and five regions stay consistent with shared vocabulary',()=>{
-  assert.equal(vocabulary.version,'0.1.0');
+  assert.equal(vocabulary.version,'0.1.1');
   assert.equal(vocabulary.regions.length,5);
   for(const r of vocabulary.regions){
     for(const alias of [r.label,...r.aliases,...Object.values(r.providerRepresentation)]){

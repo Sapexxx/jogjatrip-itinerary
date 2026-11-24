@@ -1,6 +1,11 @@
 # PR-0: CRS alignment (JogjaTrip Cloudflare Worker)
 
-This branch adopts the **unchanged** `crs-vocabulary.json` version `0.1.0` from [FaridAzis/jogjatrans-service](https://github.com/FaridAzis/jogjatrans-service/blob/main/crs-vocabulary.json). Source blob SHA: `def1557e9651943202d35778216a90101357f4c0`.
+This branch adopts the **unchanged** `crs-vocabulary.json` version `0.1.1` from [FaridAzis/jogjatrans-service](https://github.com/FaridAzis/jogjatrans-service/blob/main/crs-vocabulary.json). Source blob SHA: `14eee633a6641d373b53e48b8dc7586cd6f24f5d`.
+
+## What changed in 0.1.1
+- Payment state is scoped by entity type: `statusMappings.paymentState.vehicleRental` (`unpaid`/`paid`, a manual staff verification at pickup, not a payment gateway) and `transportTrip` (`not_applicable`). The legacy `transport["*"]` key is kept only as an alias for trips; do not apply it to vehicle rentals.
+- Two new `nonEquivalences`: rental `paid` is not an online-gateway payment, and a saved Hotel/Wisata add-on in JogjaTrans is an interest, not a booking.
+- Itinerary does not read the rental `paymentState`; order status still comes from the provider `status` (see `status()` in `src/core.ts`). No runtime code change is needed.
 
 ## Scope
 - `GET /api/semantic` returns the shared vocabulary.
