@@ -90,3 +90,15 @@ footer{background:white;border-top:1px solid var(--line);padding:30px max(5%,cal
 .ib-attraction button:disabled{opacity:.45;cursor:not-allowed}
 .ib-tabs{flex-wrap:wrap}.ib-tab{min-width:100px}
 @media(max-width:520px){.ib-rental-filters{grid-template-columns:1fr}.ib-rental-filters .ib-rental-submit{grid-column:auto}.ib-rental-results{max-height:520px}}
+
+/* Rental uses the same Explore catalog grid as Hotel and Wisata. */
+#explore .section-top{scroll-margin-top:100px}
+.explore-rental-filters,.explore-rental-more{max-width:1214px;margin:0 auto 20px;padding:0 18px}
+.explore-rental-filters .ib-rental-filters{grid-template-columns:repeat(auto-fit,minmax(155px,1fr));align-items:end;background:white}
+.explore-rental-filters .help-text{margin:0 0 14px}
+.explore-rental-more{max-width:360px;margin-top:-75px;margin-bottom:75px}
+.tile-visual.transport{background:linear-gradient(135deg,#e7edf5,#dce8e7)}
+.tile-row button:disabled{opacity:.5;cursor:not-allowed}
+.rental-card-total{display:block;color:#526d5e;font-size:11px;line-height:1.6;margin-bottom:12px}
+#exploreRentalFilters[hidden],#exploreRentalNotice[hidden],#exploreRentalMore[hidden],#catalogNotice[hidden]{display:none!important}
+#explore .tabs{flex-wrap:wrap}

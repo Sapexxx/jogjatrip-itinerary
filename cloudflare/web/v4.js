@@ -111,9 +111,7 @@ function v4SelectCandidate(p,toPlan){
 for(const id of ['v4Budget','v4Duration','v4UseHotel','v4UseWisata'])v4El(id).addEventListener('change',v4RenderFeatured);
 for(const id of ['region','tripDate','guests'])v4El(id).addEventListener('change',()=>{setTimeout(v4RenderFeatured,10);v4El('v4FeaturedDetail').hidden=true});
 v4El('v4AllPackages').onclick=()=>page('packages');
-const transportLink=document.getElementById('openTransportPlanner');
-if(transportLink)transportLink.onclick=()=>{page('journey');if(typeof integratedOpenTransport==='function')integratedOpenTransport({fromHome:true});else document.querySelector('[data-ib-tab="transport"]')?.click()};
-document.querySelectorAll('[data-v4-service]').forEach(btn=>btn.onclick=()=>{state.tab=btn.dataset.v4Service;document.querySelectorAll('[data-tab]').forEach(t=>t.classList.toggle('active',t.dataset.tab===state.tab));renderCatalog();document.querySelector('.section-top').scrollIntoView({behavior:'smooth'})});
+document.querySelectorAll('[data-v4-service]').forEach(btn=>btn.onclick=()=>{selectCatalogTab(btn.dataset.v4Service);document.querySelector('#explore .section-top').scrollIntoView({behavior:'smooth',block:'start'})});
 // Render after each successful catalog load, without replacing provider API logic.
 async function v4LoadAllCatalogs(){
  const el=v4El('v4FeaturedCards');
