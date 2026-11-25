@@ -1,4 +1,6 @@
 import type { WorkerEnv } from './types.ts';
+import {createInteropReadGateway} from './interop-gateway.ts';
+import {JournalError} from './interop-journal.ts';
 import {ApiError,fail,json,readJSON,noSecret,semanticVocabulary} from './core.ts';
 import {catalog,recommendations} from './provider.ts';
 import {quote,book,getOrder,syncOrder,details} from './orders.ts';
@@ -8,6 +10,13 @@ import {templates,getPackage,expand,bookPackage,planFromOrder} from './packages.
 function parts(path: string){return path.split('/').filter(Boolean)}
 async function handle(req: Request,env: WorkerEnv): Promise<Response>{if(!env.DB)fail(503,'Binding Cloudflare D1 belum dikonfigurasi');let u=new URL(req.url),p=parts(u.pathname),method=req.method;
  if(p[0]!=='api')return env.ASSETS.fetch(req);
+ // I4/I5: token-authenticated, read-only D1 status. No provider calls or mutation.
+ if(p.length===4&&p[1]==='interop'&&p[2]==='checkouts'&&method==='GET'){
+  if(env.INTEROP_HOLDS!=='true')fail(404,'Endpoint tidak tersedia');
+  const token=req.headers.get('X-Interop-Token')||'';
+  const snapshot=await createInteropReadGateway(env.DB).lookup(p[3],token);
+  return new Response(JSON.stringify(snapshot),{status:200,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Pragma':'no-cache','X-Content-Type-Options':'nosniff'}});
+ }
  if(p.length===2&&p[1]==='semantic'&&method==='GET')return json(semanticVocabulary);
  if(p.length===2&&p[1]==='health'&&method==='GET')return json({service:'JogjaTrip',status:'ok',storage:'cloudflare-d1',bookingEnabled:env.BOOKING_ENABLED==='true',providers:{hotel:!!env.HOTEL_API_URL,wisata:!!env.WISATA_API_URL,transport:!!env.TRANSPORT_API_URL},note:'Konfigurasi URL bukan pemeriksaan konektivitas provider'});
  if(p.length===3&&p[1]==='catalog'&&method==='GET')return json(await catalog(env,p[2],u.searchParams.get('region')||'',u.searchParams));
@@ -38,4 +47,4 @@ async function handle(req: Request,env: WorkerEnv): Promise<Response>{if(!env.DB
  }
  fail(404,'Endpoint tidak tersedia')
 }
-export default {async fetch(request: Request,env: WorkerEnv): Promise<Response>{try{return await handle(request,env)}catch(err){if(err instanceof ApiError)return json({error:err.message},err.code);console.error('Worker error',err?.stack||err);return json({error:'Kesalahan server. Periksa Workers Logs dan konfigurasi D1.'},503)}}};
+export default {async fetch(request: Request,env: WorkerEnv): Promise<Response>{try{return await handle(request,env)}catch(err){if(err instanceof ApiError)return json({error:err.message},err.code);if(err instanceof JournalError){return new Response(JSON.stringify({error:err.status===404?'Checkout tidak ditemukan atau token tidak valid':'Status checkout belum dapat diverifikasi'}),{status:err.status===404?404:409,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}})}console.error('Worker error',err?.stack||err);return json({error:'Kesalahan server. Periksa Workers Logs dan konfigurasi D1.'},503)}}};
