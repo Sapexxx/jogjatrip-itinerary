@@ -1,0 +1,13 @@
+# I1 — Generic Contract 0.2 client (isolated mock development)
+
+Base 97513010ddad1f2a28ed9995a48d55690202813b includes merged I0 PRs #6 and #11. Master `01_KONTRAK_INTEROP_0.2.md` is a draft awaiting cross-team freeze; `PR_ITINERARY_JogjaTrip.md` I-A/I-G. Only internal mock gate is in scope. The actual live section 3/5 prerequisite is not yet proven. This PR remains draft for subsequent I2–I7; no production wiring/merge/deploy/secret/schema change. No paid dependencies.
+
+## API
+
+`createInteropClient({provider,baseUrl,token,fetcher})` returns capabilities, offers, hold, confirm, release, getHold. One path implementation for all three providers. Only HTTPS origins, Bearer credentials at least 24 chars, no redirects, bounded JSON body, capabilities deadline 3s, other deadline 12s (configurable for mock). Explicit fetch injection; tests use only synthetic fetch. Validation checks master field names, date semantics, CRS regions, IDR integer, quantity, max 20, nullable location, opaque offerId, shared externalRef, consent, idempotency header and voucher.code. `price:null` follows CRS; totalPrice must be integer. GET hold requires matching ID and canonical state; optional fields validated if present because section 8 does not fully specify response shape. Confirm/release optional stable key (master mandates header only for hold). No provider-specific wire aliases, no invented filter, no recomputation of total price. Provider capabilities holds=false or durableStorage=false are returned as facts; eligibility decision belongs to I2.
+
+HTTP errors retain status and allowlisted stable codes (including nested error envelope), but never raw provider message, credentials or raw customer payload. Ambiguous mutation outcome -> `InteropError.outcomeUnknown=true`; no automatic retry, redirect or fallback. Explicit same-key replay is demonstrated in fixture only; production replay needs journal/reconciliation I3–I4. No actual payment or booking assertion.
+
+## Tests
+
+Eight master §10 cases with synthetic stateful provider, plus per-provider schema/date checks, consent, minimal customer allowlist, ownership, conflict, timeout, malformed response, oversized body, secret redaction, nested error envelope, and isolation. Provider stock changes are simulated in memory; this does not certify external provider durability. Tests: `cd cloudflare && npm test && npm run typecheck`; GitHub Workers CI also runs Wrangler dry-run. UI workflow covers existing regression, browser and Lighthouse. No external provider requests by the new suite. Inspect actual check results before declaring I1 internal complete. I2 only after I1 source/CI gate passes; live I-H remains blocked.
