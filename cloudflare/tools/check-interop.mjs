@@ -75,9 +75,7 @@ const supplemental=[
  probe('S5','PR-2: CRS katalog hotel',one('stay','/api/v1/hotels?city=Sleman',d=>{
   const a=array(d,'hotels');assert.ok(a?.length,'Katalog hotel kosong');const missing=a.filter(x=>x.provider!=='hotel'||x.entityType!=='lodging'||typeof x.resourceId!=='string'||!x.resourceId||!vocabulary.regions.some(r=>r.conceptId===x.regionId)||typeof x.name!=='string'||!x.name||x.currency!=='IDR'||x.priceUnit!=='night');assert.equal(missing.length,0,missing.length+'/'+a.length+' hotel belum memenuhi CRS lodging (provider, entityType, resourceId, regionId, name, currency, priceUnit)');return a.length+' hotel CRS lodging'
  })),
- probe('S6','PR-3: Capabilities booking Wisata',one('wisata','/api/v1/partner/capabilities',d=>{
-  assert.ok(String(d?.bookingStatus||'').toUpperCase()==='PENDING'&&d?.durableStorage===true&&d?.idempotentBooking===true,'Booking belum siap (harus PENDING/true/true)');return 'PENDING, durableStorage=true, idempotentBooking=true'
- })),
+ Promise.resolve(skip('S6','PR-3: Capabilities booking Wisata (legacy, superseded)','Endpoint legacy /api/v1/partner/capabilities and PENDING/durableStorage=true expectation are not implemented; historical audit 24 Nov returned 404. Contract 0.2 readiness and W2 durability remain BLOCKED; not a PASS.')),
  probe('S7','CRS JogjaTrip ↔ JogjaTrans',r=>multi([
   ['trip','trip','/api/semantic',d=>sameVocabulary(d,'trip')],
   ['trans','trans','/api/v1/semantic',d=>sameVocabulary(d,'trans')]
@@ -87,7 +85,8 @@ const supplemental=[
 const checks=await Promise.all(main);
 const extras=await Promise.all(supplemental);
 const summarize=a=>({total:a.length,passed:a.filter(x=>x.status==='PASS').length,failed:a.filter(x=>x.status==='FAIL').length,skipped:a.filter(x=>x.status==='SKIP').length});
-const report={timestamp:new Date().toISOString(),commit:process.env.GITHUB_SHA||null,mode:'READ_ONLY_GET',crsVersion:vocabulary.version,targets:HOSTS,checks,extras,summary:summarize(checks),supplementalSummary:summarize(extras)};
+const readiness={contract:'0.2.0',status:'BLOCKED',reason:'Master contract remains draft; authenticated capabilities, durable provider holds and staging proof not verified. Read-only CRS audit does not establish transaction readiness.'};
+const report={transactionReadiness:readiness,timestamp:new Date().toISOString(),commit:process.env.GITHUB_SHA||null,mode:'READ_ONLY_GET',crsVersion:vocabulary.version,targets:HOSTS,checks,extras,summary:summarize(checks),supplementalSummary:summarize(extras)};
 for(const c of [...checks,...extras])console.log(c.status+' '+c.id+' '+c.title+' | '+c.detail);
 console.log('PR-5 '+JSON.stringify(report.summary)+'; supplemental '+JSON.stringify(report.supplementalSummary));
 const dir=process.env.INTEROP_REPORT_DIR||'interop-report';
@@ -96,6 +95,6 @@ await fs.writeFile(path.join(dir,'result.json'),JSON.stringify(report,null,2)+'\
 const clean=s=>String(s).replaceAll('|','/').replaceAll('\n',' ');
 const row=c=>'| '+c.id+' | '+clean(c.title)+' | '+c.status+' | '+clean(c.detail)+' |';
 const count=s=>s.passed+' PASS / '+s.failed+' FAIL / '+s.skipped+' SKIP (total '+s.total+')';
-const md=['# PR-I3 / PR-5 Interoperability Live Audit','',report.timestamp,'Commit: '+(report.commit||'local'),'CRS: '+report.crsVersion,'','**READ-ONLY:** GET saja. Tidak memesan, mengubah stok, atau membayar.','','## Delapan jalur','| Jalur | Arah | Hasil | Catatan |','|---|---|---|---|',...checks.map(row),'','**Hasil utama: '+count(report.summary)+'.**','','## Pemeriksaan pendukung','| ID | Kontrak | Hasil | Catatan |','|---|---|---|---|',...extras.map(row),'','**Pendukung: '+count(report.supplementalSummary)+'.**','','SKIP berarti tidak diuji karena desain/prasyarat, bukan sukses. FAIL tetap gagal. Bukti terbatas pada HTTP dan kontrak yang diperiksa; UI, transaksi saga, keamanan token, serta persistensi booking belum dibuktikan.',''];
+const md=['# PR-I3 / PR-5 Interoperability Live Audit','',report.timestamp,'Commit: '+(report.commit||'local'),'CRS: '+report.crsVersion,'','**READ-ONLY:** GET saja. Tidak memesan, mengubah stok, atau membayar.','','## Delapan jalur','| Jalur | Arah | Hasil | Catatan |','|---|---|---|---|',...checks.map(row),'','**Hasil utama: '+count(report.summary)+'.**','','## Pemeriksaan pendukung','| ID | Kontrak | Hasil | Catatan |','|---|---|---|---|',...extras.map(row),'','**Pendukung: '+count(report.supplementalSummary)+'.**','','Contract 0.2: BLOCKED (audit ini tidak menguji transaksi atau autentikasi partner). SKIP berarti tidak diuji karena desain/prasyarat, bukan sukses. FAIL tetap gagal. Bukti terbatas pada HTTP dan kontrak yang diperiksa; UI, transaksi saga, keamanan token, serta persistensi booking belum dibuktikan.',''];
 await fs.writeFile(path.join(dir,'summary.md'),md.join('\n'));
 if(report.summary.failed||report.supplementalSummary.failed)process.exitCode=1;

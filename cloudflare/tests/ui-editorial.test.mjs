@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+const read=p=>readFileSync(new URL('../web/'+p,import.meta.url),'utf8');
+test('editorial home keeps all three service actions and honest catalog claims',()=>{const h=read('index.html');for(const type of ['hotel','wisata','transport'])assert.match(h,new RegExp('data-v4-service="'+type+'"'));assert.match(h,/id="heroExplore"/);assert.match(h,/Katalog terintegrasi · simulasi akademik/);assert.doesNotMatch(h,/diskon khusus JogjaTrip/);assert.match(read('app.js'),/jtSkeleton/);assert.match(read('v4.js'),/Estimasi katalog · sebelum quote/)});
+test('order details represent rental dates, provider reference and status text',()=>{const o=read('orders.js');assert.match(o,/jdDate\(it.startDate\)/);assert.match(o,/jdDate\(it.endDate\)/);assert.match(o,/transport\?it.vehicleId/);assert.match(o,/jdStatusIcon\(x.status\)/);assert.match(o,/Pelajari lebih lanjut/)});

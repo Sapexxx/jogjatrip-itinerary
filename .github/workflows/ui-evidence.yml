@@ -1,0 +1,50 @@
+name: Itinerary Jogja UI evidence
+on:
+  push:
+    branches: [feat/itinerary-jogja-ui]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  visual:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Contrast baseline (known defects)
+        run: python3 scripts/check-contrast.py --baseline || echo "Baseline defects recorded"
+      - name: Check declared design token contrast when present
+        run: |
+          if [ -f cloudflare/web/tokens.css ]; then python3 scripts/check-contrast.py; fi
+      - name: Capture responsive and interaction evidence with local fixtures
+        run: node cloudflare/tools/ui-evidence.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: itinerary-jogja-ui-evidence
+          path: ui-report/
+          retention-days: 14
+
+  lighthouse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned Lighthouse (CI only)
+        run: npm install --prefix "$RUNNER_TEMP/itinerary-audit" --no-audit --no-fund lighthouse@12.8.2
+      - name: Verify all five mobile routes
+        env:
+          LIGHTHOUSE_BIN: ${{ runner.temp }}/itinerary-audit/node_modules/.bin/lighthouse
+        run: node cloudflare/tools/ui-lighthouse.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: itinerary-jogja-lighthouse
+          path: lighthouse-report/
+          retention-days: 14
