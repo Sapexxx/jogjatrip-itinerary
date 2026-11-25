@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
-import {Miniflare} from 'miniflare';
+import {readFileSync,mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 import {createInteropJournal,JournalError} from '../src/interop-journal.ts';
 import {createInteropClient} from '../src/interop.ts';
 import {mockProvider,TOKEN} from './fixtures/interop-provider.mjs';
@@ -11,12 +13,21 @@ const mkIntent=(items=[{item:baseItem,expectedTotal:10000}])=>({customer:{name:'
 const offer=(item=baseItem)=>({provider:item.type,entityType:item.type==='hotel'?'lodging':item.type==='wisata'?'tourist_attraction':'vehicle_rental',resourceId:'R-01',offerId:'opaque-fixture',quantity:item.type==='wisata'?item.quantity:1,period:{startDate:item.type==='hotel'?item.checkIn:item.type==='wisata'?item.visitDate:item.startDate,endDate:item.type==='hotel'?item.checkOut:item.type==='wisata'?item.visitDate:item.endDate},totalPrice:10000,currency:'IDR',generatedAt:'2026-12-01T03:00:00Z'});
 const error=code=>e=>e instanceof JournalError&&e.code===code;
 const migration=n=>readFileSync(new URL('../migrations/'+n,import.meta.url),'utf8');
+function openFixture(persist){
+ return new Miniflare(convertV4MiniflareOptions({
+  modules:true,script:'export default {fetch(){return new Response("fixture only")}}',
+  d1Databases:{DB:'i3-local-fixture'},...(persist?{d1Persist:persist}:{})
+ }));
+}
+async function applyMigration(db,n){
+ for(const s of migration(n).replace(/^--.*$/gm,'').split(';').map(x=>x.trim()).filter(Boolean))await db.prepare(s).run();
+}
 async function fixture(t){
  let clock=Date.parse('2026-12-01T03:00:00Z');
- const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("fixture only")}}',d1Databases:['DB']});
+ const mf=openFixture();
  t.after(()=>mf.dispose());
  const db=await mf.getD1Database('DB');
- const apply=async n=>{for(const s of migration(n).replace(/^--.*$/gm,'').split(';').map(x=>x.trim()).filter(Boolean))await db.prepare(s).run()};
+ const apply=n=>applyMigration(db,n);
  await apply('0001_init.sql');
  await db.prepare('INSERT INTO jt_orders VALUES(?,?,?,?,?)').bind('legacy','{"old":true}','hash','old','old').run();
  await db.prepare('INSERT INTO jt_plans VALUES(?,?,?,?,?)').bind('legacy-plan','{}','hash',null,'old').run();
@@ -145,4 +156,52 @@ test('I3 D1: integration with I1 fixture lost response recovers exact same key a
 test('I3: journal module isolated, no production migration or wiring',()=>{
  for(const f of ['index.ts','orders.ts','provider.ts','plans.ts','packages.ts','db.ts'])assert.doesNotMatch(readFileSync(new URL('../src/'+f,import.meta.url),'utf8'),/from\s+['"][^'"]*interop-journal\.ts/);
  assert.match(readFileSync(new URL('../wrangler.jsonc',import.meta.url),'utf8'),/"BOOKING_ENABLED"\s*:\s*"false"/);
+});
+
+test('I3 D1: checkout and operation survive complete runtime disposal',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'jogjatrip-i3-'));
+ let mf;
+ t.after(async()=>{try{if(mf)await mf.dispose()}finally{rmSync(dir,{recursive:true,force:true})}});
+ mf=openFixture(dir);
+ let db=await mf.getD1Database('DB');
+ await applyMigration(db,'0001_init.sql');await applyMigration(db,'0002_interop_holds.sql');
+ const now=()=>Date.parse('2026-12-01T03:00:00Z');
+ let j=createInteropJournal(db,{now,leaseMs:1000});
+ const {checkout:c}=await j.reserveCheckout(KEY,TOKEN_A,mkIntent(),[offer()]);
+ const lock=await j.claimLock(c.orderId,TOKEN_A);
+ const a=await j.beginOperation(lock,0,'HOLD');
+ await mf.dispose();mf=undefined;
+ mf=openFixture(dir);db=await mf.getD1Database('DB');j=createInteropJournal(db,{now,leaseMs:1000});
+ const replay=await j.reserveCheckout(KEY,TOKEN_A,mkIntent());
+ assert.equal(replay.created,false);assert.deepEqual(replay.checkout,c);
+ const r=await j.getOperationRequest(lock,0,'HOLD');
+ assert.equal(r.idempotencyKey,a.operation.idempotencyKey);assert.equal(r.operation.requestHash,a.operation.requestHash);
+ assert.equal(r.operation.state,'IN_FLIGHT');
+});
+test('I3 D1: confirm cannot start after compensation of any item',async t=>{
+ const f=await fixture(t),w={type:'wisata',destinationId:101,visitDate:'2026-12-13',quantity:1,tier:'base'};
+ const {c,lock}=await start(f,mkIntent([{item:baseItem,expectedTotal:10000},{item:w,expectedTotal:10000}]),[offer(),offer(w)]);
+ await saveHold(f,c,lock,0);await saveHold(f,c,lock,1);
+ const r=await f.j.beginOperation(lock,1,'RELEASE');
+ await f.j.recordOutcome(lock,1,'RELEASE',r.operation.revision,{state:'SUCCEEDED',result:{holdId:'H-1',reservationState:'cancelled'}});
+ await assert.rejects(f.j.beginOperation(lock,0,'CONFIRM'),error('OPERATION_BLOCKED'));
+});
+test('I3 D1: already confirmed is not definitive rejection',async t=>{
+ const f=await fixture(t),{c,lock}=await start(f);await saveHold(f,c,lock);
+ const a=await f.j.beginOperation(lock,0,'CONFIRM');
+ await assert.rejects(f.j.recordOutcome(lock,0,'CONFIRM',a.operation.revision,{state:'REJECTED',code:'ALREADY_CONFIRMED',httpStatus:409}),error('AMBIGUOUS_OUTCOME'));
+ const r=await f.j.recordOutcome(lock,0,'CONFIRM',a.operation.revision,{state:'UNKNOWN',code:'ALREADY_CONFIRMED',httpStatus:409});
+ assert.equal(r.state,'UNKNOWN');await assert.rejects(f.j.releaseLock(lock),error('LOCK_LOST_OR_UNRESOLVED'));
+});
+test('I3 D1: 50 parallel same-key checkouts create one durable row',async t=>{
+ const f=await fixture(t);
+ const r=await Promise.all(Array.from({length:50},()=>f.j.reserveCheckout(KEY,TOKEN_A,mkIntent(),[offer()])));
+ assert.equal(r.filter(x=>x.created).length,1);assert.equal(new Set(r.map(x=>x.checkout.orderId)).size,1);
+ assert.equal((await f.db.prepare('SELECT COUNT(*) AS n FROM jt_checkout_requests').first()).n,1);
+});
+test('I3 D1: constraints reject invalid operations and orphan locks',async t=>{
+ const f=await fixture(t);
+ await assert.rejects(f.db.prepare("INSERT INTO jt_order_locks(order_id) VALUES(?)").bind('missing-order').run());
+ const {checkout:c}=await f.j.reserveCheckout(KEY,TOKEN_A,mkIntent(),[offer()]);
+ await assert.rejects(f.db.prepare("INSERT INTO jt_order_locks(order_id,fence) VALUES(?,?)").bind(c.orderId,-1).run());
 });

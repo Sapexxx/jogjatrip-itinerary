@@ -173,8 +173,9 @@ export function createInteropJournal(db:D1Binding,options:{now?:()=>number;lease
    ' AND NOT EXISTS(SELECT 1 FROM jt_interop_operations WHERE order_id=? AND '+unresolved+')'+
    " AND (?='HOLD' OR EXISTS(SELECT 1 FROM jt_interop_operations WHERE order_id=? AND item_index=? AND operation='HOLD' AND state='SUCCEEDED'))"+
    " AND (?<>'CONFIRM' OR (SELECT COUNT(*) FROM jt_interop_operations WHERE order_id=? AND operation='HOLD' AND state='SUCCEEDED')=(SELECT json_array_length(offers_json) FROM jt_checkout_requests WHERE order_id=?))"+
+   " AND (?<>'CONFIRM' OR NOT EXISTS(SELECT 1 FROM jt_interop_operations WHERE order_id=? AND operation='RELEASE'))"+
    " AND (?='HOLD' OR NOT EXISTS(SELECT 1 FROM jt_interop_operations WHERE order_id=? AND item_index=? AND operation IN ('CONFIRM','RELEASE') AND operation<>?))"+
-   ' ON CONFLICT(order_id,item_index,operation) DO NOTHING').bind(proof.orderId,index,req.provider,operation,req.key,req.requestHash,req.holdId,'IN_FLIGHT',at,at,proof.orderId,hash,proof.fence,proof.purpose,now(),proof.orderId,operation,proof.orderId,index,operation,proof.orderId,proof.orderId,operation,proof.orderId,index,operation).run();
+   ' ON CONFLICT(order_id,item_index,operation) DO NOTHING').bind(proof.orderId,index,req.provider,operation,req.key,req.requestHash,req.holdId,'IN_FLIGHT',at,at,proof.orderId,hash,proof.fence,proof.purpose,now(),proof.orderId,operation,proof.orderId,index,operation,proof.orderId,proof.orderId,operation,proof.orderId,operation,proof.orderId,index,operation).run();
   const row=await readOp(proof.orderId,index,operation);
   demand(row&&row.request_hash===req.requestHash,'OPERATION_BLOCKED',409);return {created:changed(r),operation:rowOperation(row)};
  }
@@ -216,7 +217,7 @@ export function createInteropJournal(db:D1Binding,options:{now?:()=>number;lease
    code=errorCodes.has(outcome.code)?outcome.code:'UPSTREAM_HTTP_ERROR';
    httpStatus=outcome.httpStatus===undefined?null:int(outcome.httpStatus,100,599);
    // Definitive rejection must be an explicit, known non-mutating contract response.
-   if(outcome.state==='REJECTED')demand(httpStatus===401||(httpStatus===400&&['CONSENT_REQUIRED','VALIDATION_ERROR','INVALID_REQUEST','INVALID_IDEMPOTENCY_KEY','INVALID_EXTERNAL_REF'].includes(code))||(httpStatus===409&&['NOT_AVAILABLE','HOLD_EXPIRED','HOLD_RELEASED','ALREADY_CONFIRMED'].includes(code))||(httpStatus===422&&code==='INVALID_OFFER'),'AMBIGUOUS_OUTCOME',409);
+   if(outcome.state==='REJECTED')demand(httpStatus===401||(httpStatus===400&&['CONSENT_REQUIRED','VALIDATION_ERROR','INVALID_REQUEST','INVALID_IDEMPOTENCY_KEY','INVALID_EXTERNAL_REF'].includes(code))||(httpStatus===409&&['NOT_AVAILABLE','HOLD_EXPIRED','HOLD_RELEASED'].includes(code))||(httpStatus===422&&code==='INVALID_OFFER'),'AMBIGUOUS_OUTCOME',409);
   }
   const r=await db.prepare('UPDATE jt_interop_operations SET state=?,result_json=?,error_code=?,http_status=?,hold_id=?,revision=revision+1,updated_at=? WHERE order_id=? AND item_index=? AND operation=? AND revision=? AND '+unresolved+' AND '+liveLock).bind(outcome.state,resultJson,code,httpStatus,holdId,iso(),proof.orderId,index,operation,expectedRevision,proof.orderId,hash,proof.fence,proof.purpose,now()).run();
   demand(changed(r),'REVISION_OR_LOCK_CONFLICT',409);
