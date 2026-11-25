@@ -22,7 +22,7 @@ footer{background:white;border-top:1px solid var(--line);padding:30px max(5%,cal
 
 
 /* I5 isolated checkout reference. No backend booking actions are exposed. */
-.jt-i5-checkout{border:1px solid var(--border,rgba(91,101,105,.24));border-radius:12px;padding:16px;margin:16px 0;background:var(--surface,#fff);display:grid;gap:9px}
+.jt-i5-checkout{border:1px solid var(--line);border-radius:12px;padding:16px;margin:16px 0;background:var(--white);display:grid;gap:9px}
 .jt-i5-checkout h3{margin:0;font-size:1rem}
 .jt-i5-checkout p{margin:0;line-height:1.55;overflow-wrap:anywhere}
 .jt-i5-checkout small{line-height:1.55}
