@@ -10,8 +10,69 @@ const dateStr=d=>{const x=new Date(d.getTime()-d.getTimezoneOffset()*60000);retu
 const today=new Date();$('#tripDate').min=dateStr(today);$('#tripDate').value=dateStr(new Date(today.getTime()+86400000*7));
 function toast(t){const el=$('#toast');el.textContent=t;el.style.display='block';clearTimeout(window.toastTimer);window.toastTimer=setTimeout(()=>el.style.display='none',5500)}
 async function request(path,opts={}){let res;try{res=await fetch(path,{headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts})}catch(e){throw Error('Tidak dapat terhubung ke server Itinerary Jogja')};let data;try{data=await res.json()}catch{throw Error('Respons server bukan JSON')};if(!res.ok)throw Error(data.error||`HTTP ${res.status}`);return data}
-function page(name){$$('.page').forEach(x=>x.classList.toggle('active',x.id===name));$$('.navlink').forEach(x=>{const active=x.dataset.page===name;x.classList.toggle('active',active);if(active)x.setAttribute('aria-current','page');else x.removeAttribute('aria-current')});if(name==='planner')renderCart();if(name==='orders')renderOrders();document.querySelector('#'+name+' h1')?.focus({preventScroll:true});window.scrollTo({top:0,behavior:'smooth'})}
-$$('[data-page]').forEach(x=>x.onclick=()=>page(x.dataset.page));$('#heroPlan').onclick=()=>page('planner');
+// Public navigation only: never serialize plan IDs, credentials or customer data.
+const jtRoutes=Object.freeze({explore:'beranda',packages:'paket',planner:'pilihan',journey:'itinerary',orders:'pesanan'});
+function jtRouteHash(name,day=null){
+ const route=Object.prototype.hasOwnProperty.call(jtRoutes,name)?name:'explore';
+ return '#/'+jtRoutes[route]+(route==='journey'&&Number.isInteger(day)&&day>=1&&day<=16?'/hari-'+day:'');
+}
+function jtParseRoute(hash){
+ const match=/^#\/(beranda|paket|pilihan|itinerary|pesanan)(?:\/hari-([1-9]|1[0-6]))?$/.exec(String(hash||''));
+ if(!match||(match[2]&&match[1]!=='itinerary'))return {name:'explore',day:null};
+ return {name:Object.keys(jtRoutes).find(key=>jtRoutes[key]===match[1]),day:match[2]?Number(match[2]):null};
+}
+let jtActiveRoute={name:'explore',day:null},jtAppliedHash='';
+function jtSetMenu(open){
+ const nav=$('#mainNav'),btn=$('#mobileNavToggle');
+ if(!nav||!btn)return;
+ nav.dataset.open=String(open);btn.setAttribute('aria-expanded',String(open));
+}
+function jtApplyRoute(route,{focus=true,scroll=true}={}){
+ jtActiveRoute=route;jtAppliedHash=jtRouteHash(route.name,route.day);
+ $$('.page').forEach(x=>x.classList.toggle('active',x.id===route.name));
+ $$('.navlink').forEach(x=>{const active=x.dataset.page===route.name;x.classList.toggle('active',active);if(active)x.setAttribute('aria-current','page');else x.removeAttribute('aria-current')});
+ jtSetMenu(false);
+ if(route.name==='planner')renderCart();
+ if(route.name==='orders')renderOrders();
+ if(route.name==='journey'&&typeof integratedApplyDayRoute==='function')integratedApplyDayRoute();
+ const dayHeading=route.name==='journey'&&route.day?$('#ibDayHeading'+route.day):null;
+ const target=dayHeading&&!dayHeading.closest('[hidden]')?dayHeading:$('#'+route.name+' h1');
+ if(focus)target?.focus({preventScroll:true});
+ if(scroll){
+  if(dayHeading&&!dayHeading.closest('[hidden]'))dayHeading.scrollIntoView({block:'start'});
+  else window.scrollTo({top:0,behavior:'instant'});
+ }
+}
+function page(name,day=null){
+ const hash=jtRouteHash(name,day);
+ if(window.location.hash!==hash)window.history.pushState(null,'',hash);
+ jtApplyRoute(jtParseRoute(hash));
+}
+function jtReadLocation({initial=false}={}){
+ const raw=window.location.hash,route=jtParseRoute(raw);
+ // The skip link is an in-page accessibility anchor, not a route.
+ if(raw==='#mainContent'&&!initial)return;
+ const hash=jtRouteHash(route.name,route.day);
+ if(raw!==hash)window.history.replaceState(null,'',hash);
+ if(initial||hash!==jtAppliedHash)jtApplyRoute(route,{focus:!initial||route.name!=='explore',scroll:!initial||route.name!=='explore'});
+}
+function jtHandleNav(e,link){
+ if(e&&(e.button!==0||e.ctrlKey||e.metaKey||e.shiftKey||e.altKey))return;
+ e?.preventDefault();page(link.dataset.page);
+}
+$$('[data-page]').forEach(x=>x.onclick=e=>jtHandleNav(e,x));
+$('#heroPlan').onclick=()=>page('planner');
+// Defer initial routing until all classic deferred scripts have initialized.
+document.addEventListener?.('DOMContentLoaded',()=>{
+ const menu=$('#mobileNavToggle'),nav=$('#mainNav');
+ menu?.addEventListener('click',()=>jtSetMenu(menu.getAttribute('aria-expanded')!=='true'));
+ nav?.addEventListener('keydown',e=>{if(e.key==='Escape'&&nav.dataset.open==='true'){e.preventDefault();jtSetMenu(false);menu?.focus()}});
+ menu?.addEventListener('keydown',e=>{if(e.key==='Escape'){jtSetMenu(false);menu.focus()}});
+ $('.skip-link')?.addEventListener('click',e=>{e.preventDefault();$('#mainContent')?.focus({preventScroll:true});$('#mainContent')?.scrollIntoView({block:'start'})});
+ window.addEventListener('popstate',()=>jtReadLocation());
+ window.addEventListener('hashchange',()=>jtReadLocation());
+ jtReadLocation({initial:true});
+});
 $$('[data-tab]').forEach(x=>x.onclick=()=>selectCatalogTab(x.dataset.tab));
 const region=()=>$('#region').value, tripDate=()=>$('#tripDate').value, guests=()=>Number($('#guests').value), nights=()=>Number($('#nights').value);
 function endDate(start,n){const d=new Date(start+'T12:00:00');d.setDate(d.getDate()+n);return dateStr(d)}

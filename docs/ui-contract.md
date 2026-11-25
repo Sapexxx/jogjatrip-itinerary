@@ -51,3 +51,7 @@ Baseline produksi: `f9643592b860163fa26b93225397d66e3d299edf` (`cloudflare-deplo
 
 ## Guardrails
 Preserve existing IDs, data attributes, selectors, API paths, storage keys, escaping and event behavior. Preserve three providers and disabled production checkout. Do not copy Cloudflare frontend blindly to Go; rental is unsupported on Go.
+
+## Phase 3 navigation contract
+
+`page(name, day=null)` remains the public JS entry point. `data-page` stays on the five native nav anchors and existing CTAs. `jtRouteHash`, `jtParseRoute` and `jtActiveRoute` contain only public page/day navigation. `#mainNav` and `#mobileNavToggle` implement mobile disclosure. `#ibDayNav`, `#ibDayNotice`, `data-ib-day`, `data-ib-day-link` and `#ibDayHeadingN` select a local day without changing activity data. `#/itinerary/hari-N` supports 1–16; unavailable days display a notice and all currently available days. The route is not a public share of saved plan contents; no token, ID or personal data is placed in the URL. Existing cart, package and order side effects remain.

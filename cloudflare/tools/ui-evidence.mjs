@@ -68,6 +68,31 @@ try{
    await fs.writeFile(path.join(out,width+'-'+name+'.png'),Buffer.from(image.data,'base64'));
    report.push({viewport:width,page:name,...info,overflow:info.scrollWidth>info.width});
   }
+  // Real link clicks, browser history, deep-link day selection, and mobile disclosure.
+  const navCheck=await evaluate("(()=>{page('explore');const menu=document.querySelector('#mobileNavToggle'),nav=document.querySelector('#mainNav');const mobile=matchMedia('(max-width:800px)').matches;let disclosure=true;if(mobile){disclosure=getComputedStyle(nav).display==='none';menu.click();disclosure=disclosure&&menu.getAttribute('aria-expanded')==='true'&&getComputedStyle(nav).display!=='none';nav.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));disclosure=disclosure&&menu.getAttribute('aria-expanded')==='false'&&document.activeElement===menu;menu.click()}nav.querySelector('[data-page=packages]').click();return {disclosure,active:document.querySelector('.page.active').id,hash:location.hash,aria:nav.querySelector('[aria-current=page]')?.dataset.page,closed:menu.getAttribute('aria-expanded')==='false',focus:document.activeElement===document.querySelector('#packages h1')}})()");
+  checks.push({viewport:width,check:'Native navigation, mobile disclosure, focus and ARIA',passed:navCheck.disclosure&&navCheck.active==='packages'&&navCheck.hash==='#/paket'&&navCheck.aria==='packages'&&navCheck.closed&&navCheck.focus});
+  await evaluate("history.back()");
+  for(let i=0;i<40;i++){if(await evaluate("location.hash==='#/beranda'&&document.querySelector('.page.active').id==='explore'"))break;await wait(50)}
+  const back=await evaluate("location.hash==='#/beranda'&&document.querySelector('.page.active').id==='explore'");
+  await evaluate("history.forward()");
+  for(let i=0;i<40;i++){if(await evaluate("location.hash==='#/paket'&&document.querySelector('.page.active').id==='packages'"))break;await wait(50)}
+  const forward=await evaluate("location.hash==='#/paket'&&document.querySelector('.page.active').id==='packages'");
+  checks.push({viewport:width,check:'Browser back and forward',passed:back&&forward});
+  await evaluate("page('journey');document.querySelector('[data-ib-day-link=\"2\"]').click()");
+  const dayExpr="location.hash==='#/itinerary/hari-2'&&document.querySelector('.page.active').id==='journey'&&document.querySelector('[data-ib-day=\"2\"]').hidden===false&&[...document.querySelectorAll('[data-ib-day]')].filter(x=>!x.hidden).length===1&&document.querySelector('[data-ib-day-link=\"2\"]').getAttribute('aria-current')==='location'";
+  checks.push({viewport:width,check:'Day link selects only day 2',passed:await evaluate(dayExpr)});
+  await call('Page.navigate',{url:base+'/?route-test=1#/itinerary/hari-2'});
+  for(let i=0;i<100;i++){if(await evaluate("document.readyState==='complete'&&("+dayExpr+")").catch(()=>false))break;await wait(100)}
+  const direct=await evaluate(dayExpr).catch(()=>false);
+  checks.push({viewport:width,check:'Fresh document opens day 2 directly',passed:direct});
+  const dayInfo=await evaluate("({active:document.querySelector('.page.active')?.id,width:document.documentElement.clientWidth,scrollWidth:document.documentElement.scrollWidth})");
+  const dayImage=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
+  await fs.writeFile(path.join(out,width+'-journey-day2.png'),Buffer.from(dayImage.data,'base64'));
+  report.push({viewport:width,page:'journey-day2',...dayInfo,overflow:dayInfo.scrollWidth>dayInfo.width});
+  await evaluate("page('journey',16)");
+  checks.push({viewport:width,check:'Unavailable day shows explicit notice',passed:await evaluate("!document.querySelector('#ibDayNotice').hidden&&document.querySelector('#ibDayNotice').textContent.includes('Hari 16')")});
+  await evaluate("page('journey');document.querySelector('.skip-link').click()");
+  checks.push({viewport:width,check:'Skip link preserves route and moves focus',passed:await evaluate("location.hash==='#/itinerary'&&document.activeElement.id==='mainContent'")});
   // Exercise all three provider types in a populated cart, including long text.
   await evaluate("state.cart=[{name:'Hotel contoh dengan nama panjang untuk memeriksa responsivitas',item:{type:'hotel',hotelId:'H1',roomId:'R1',checkIn:tripDate(),checkOut:endDate(tripDate(),2),guests:2,plannedStartTime:'14:00',plannedEndTime:'15:00'}},{name:'Destinasi wisata contoh dengan judul panjang',item:{type:'wisata',destinationId:1,visitDate:tripDate(),quantity:2,plannedStartTime:'09:00',plannedEndTime:'11:00'}},{name:'Kendaraan contoh JogjaTrans dengan nama panjang',item:{type:'transport',vehicleId:'V1',startDate:tripDate(),endDate:endDate(tripDate(),2),withDriver:false,plannedStartTime:'08:00',plannedEndTime:'09:00'}}];page('planner');window.scrollTo(0,0)");
   await wait(250);
@@ -80,5 +105,5 @@ try{
  }
  await fs.writeFile(path.join(out,'report.json'),JSON.stringify({fixture:true,report,checks,errors},null,2));
  console.log(JSON.stringify({screenshots:report.length,overflow:report.filter(x=>x.overflow),runtimeErrors:errors,checks:checks.map(({viewport,check,passed})=>({viewport,check,passed}))},null,2));
- if(errors.length||report.some(x=>x.overflow||x.active!==(x.page==='planner-filled'?'planner':x.page))||checks.some(x=>!x.passed))process.exitCode=1;
+ if(errors.length||report.some(x=>x.overflow||x.active!==(x.page==='planner-filled'?'planner':x.page==='journey-day2'?'journey':x.page))||checks.some(x=>!x.passed))process.exitCode=1;
 }finally{ws?.close();chrome.kill();server.close()}
