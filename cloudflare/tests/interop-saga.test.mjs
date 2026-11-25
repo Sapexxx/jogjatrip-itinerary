@@ -67,7 +67,7 @@ function fake(kind,opts={}){
  return {client,calls};
 }
 const error=(provider,operation,status,code,unknown=true)=>new InteropError(provider,operation,status,code,unknown);
-const run=(f,clients,minTtlMs=60000)=>createHoldSaga(f.journal,clients,{now:f.now,minTtlMs});
+const run=(f,clients,minTtlMs=60000)=>createHoldSaga(f.journal,clients,{now:f.now,minTtlMs,authorizeRecovery:async()=>true});
 async function operations(f){return (await f.journal.readJournal(f.id,f.token)).operations}
 
 test('I4: all holds recorded, explicit confirm, no payment inference',async t=>{
@@ -168,4 +168,17 @@ test('I4: module has no production route wiring and feature flag remains off',()
   assert.doesNotMatch(readFileSync(new URL('../src/'+p,import.meta.url),'utf8'),/from\s+['"][^'"]*interop-saga\.ts/);
  }
  assert.match(readFileSync(new URL('../wrangler.jsonc',import.meta.url),'utf8'),/"BOOKING_ENABLED"\s*:\s*"false"/);
+});
+
+test('I4 recovery: operator authorization callback required before any D1 lock takeover',async t=>{
+ const f=await fixture(t),a=fake('transport',{holdError:error('transport','hold',504,'UPSTREAM_TIMEOUT')});
+ const ordinary=createHoldSaga(f.journal,{transport:a.client},{now:f.now,minTtlMs:60000});
+ assert.equal((await ordinary.hold(f.id,f.token)).status,'UNKNOWN');
+ const lock=await f.db.prepare('SELECT fence FROM jt_order_locks WHERE order_id=?').bind(f.id).first();
+ f.advance(1001);
+ await assert.rejects(ordinary.reconcile(f.id,f.token,lock.fence,true),/OPERATOR_AUTH_REQUIRED/);
+ const denied=createHoldSaga(f.journal,{transport:a.client},{now:f.now,authorizeRecovery:async()=>false});
+ await assert.rejects(denied.reconcile(f.id,f.token,lock.fence,true),/OPERATOR_AUTH_REQUIRED/);
+ assert.equal((await f.db.prepare('SELECT fence FROM jt_order_locks WHERE order_id=?').bind(f.id).first()).fence,lock.fence);
+ assert.equal(a.calls.getHold,0);
 });
