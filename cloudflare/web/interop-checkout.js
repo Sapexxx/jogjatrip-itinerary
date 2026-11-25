@@ -67,7 +67,7 @@ function createDraftManager(storage,cryptoProvider,clock=()=>Date.now()){
   const prior=get(scope);if(prior&&LOCKED.has(prior.state))throw new Error('CHECKOUT_STATE_LOCKED');
   storage.removeItem(slot(scope));
  }
- return Object.freeze({get,prepare,transition,reset});
+ return Object.freeze({get,prepare,reset});
 }
 const descriptions={
  DRAFT:'Referensi checkout lokal tersedia. Belum ada HOLD, CONFIRM, pembayaran atau panggilan provider.',
@@ -131,4 +131,5 @@ function mount(){
 }
 const api={createDraftManager,inspect,description,mount};
 root.JTInteropI5=api;
+if(root.document)root.JTInteropI5Mounted=mount();
 })(typeof window==='undefined'?globalThis:window);
