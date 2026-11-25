@@ -1,7 +1,13 @@
 name: Itinerary Jogja UI evidence
 on:
   push:
-    branches: [feat/itinerary-jogja-ui]
+    branches: [feat/itinerary-jogja-ui, fix/i0-wisata-handoff, feat/interop-client-0.2]
+  pull_request:
+    branches: [cloudflare-deploy]
+    paths:
+      - 'cloudflare/web/**'
+      - 'cloudflare/tools/ui-*.mjs'
+      - '.github/workflows/ui-evidence.yml'
   workflow_dispatch:
 permissions:
   contents: read

@@ -50,6 +50,39 @@ function page(name,day=null){
  if(window.location.hash!==hash)window.history.pushState(null,'',hash);
  jtApplyRoute(jtParseRoute(hash));
 }
+// PR-I5 prerequisite: untrusted inbound context, never an order or an automatic cart addition.
+function jtParseWisataHandoff(search,nowDate){
+ const params=new URLSearchParams(search);
+ if(!params.getAll('from').includes('wisata'))return null;
+ const ids=params.getAll('destinationId'),dates=params.getAll('visitDate');
+ const id=params.getAll('from').length===1&&ids.length===1&&/^[1-9]\d{0,14}$/.test(ids[0])?ids[0]:null;
+ const day=dates.length===1?dates[0]:'';
+ const epoch=Date.parse(day+'T00:00:00Z'),start=Date.parse(nowDate+'T00:00:00Z');
+ const date=/^\d{4}-\d{2}-\d{2}$/.test(day)&&Number.isFinite(epoch)&&new Date(epoch).toISOString().slice(0,10)===day&&epoch>=start&&epoch<=start+365*86400000?day:null;
+ return {id,date};
+}
+let jtInboundWisata=null,jtInboundReady=false;
+function jtInitWisataHandoff(){
+ const url=new URL(window.location.href),parsed=jtParseWisataHandoff(url.search,dateStr(new Date()));
+ if(!parsed)return;
+ jtInboundWisata=parsed;
+ for(const key of ['from','destinationId','visitDate'])url.searchParams.delete(key);
+ window.history.replaceState(window.history.state,'',url.pathname+url.search+url.hash);
+ jtInboundReady=true;
+ jtApplyWisataHandoff();
+}
+function jtApplyWisataHandoff(){
+ if(!jtInboundReady||!jtInboundWisata||state.catalogLoading)return;
+ const pending=jtInboundWisata;jtInboundWisata=null;
+ if(!pending.id){toast('Tautan Wisata tidak valid. Pilih destinasi dari katalog.');return}
+ if(state.catalogResults.destinations!=='ok'){toast('Katalog Wisata belum dapat dimuat. Pilih destinasi setelah memuat ulang katalog.');return}
+ const d=state.destinations.find(x=>String(x.id)===pending.id);
+ if(!d){toast('Destinasi dari tautan tidak ditemukan dalam katalog Wisata.');return}
+ if($('#detailDialog').open){toast('Tautan Wisata tidak dibuka karena dialog lain sedang aktif. Pilih destinasi dari katalog.');return}
+ if(pending.date)$('#tripDate').value=pending.date;
+ page('explore');selectCatalogTab('wisata');
+ openDetail({kind:'wisata',id:String(d.id),name:d.name,desc:d.region||'Yogyakarta',price:Number(d.price||0),data:d});
+}
 function jtReadLocation({initial=false}={}){
  const raw=window.location.hash,route=jtParseRoute(raw);
  // The skip link is an in-page accessibility anchor, not a route.
@@ -75,6 +108,7 @@ document.addEventListener?.('DOMContentLoaded',()=>{
  window.addEventListener('popstate',()=>jtReadLocation());
  window.addEventListener('hashchange',()=>jtReadLocation());
  jtReadLocation({initial:true});
+ jtInitWisataHandoff();
 });
 $$('[data-tab]').forEach(x=>x.onclick=()=>selectCatalogTab(x.dataset.tab));
 const region=()=>$('#region').value, tripDate=()=>$('#tripDate').value, guests=()=>Number($('#guests').value), nights=()=>Number($('#nights').value);
@@ -150,7 +184,7 @@ async function loadCatalog(){
  const rental=loadExploreVehicles();
  await Promise.allSettled([...jobs,rental]);
  if(seq!==state.catalogSeq)return;
- state.catalogLoading=false;renderCatalog();if(typeof renderPackages==='function')renderPackages();
+ state.catalogLoading=false;renderCatalog();if(typeof renderPackages==='function')renderPackages();jtApplyWisataHandoff();
 }
 function renderCatalog(){
  const rental=state.tab==='transport',showVehicles=rental||state.tab==='all';

@@ -10,6 +10,7 @@ const out=process.env.UI_REPORT_DIR||'ui-report';
 await fs.mkdir(out,{recursive:true});
 const fixtures={hotels:[{hotelId:'H1',name:'Hotel contoh (fixture)',city:'Sleman'}],rooms:[{hotelId:'H1',roomId:'R1',roomType:'Standard',pricePerNight:250000,capacity:2,totalUnits:3}],destinations:[{id:1,name:'Wisata contoh (fixture)',region:'kabupaten-sleman',price:10000}],vehicles:[{id:'V1',name:'Kendaraan contoh (fixture)',type:'mobil',dailyPrice:200000,totalPrice:600000,days:3,unitsAvailable:2,available:true}]};
 const types={'.html':'text/html','.css':'text/css','.js':'text/javascript','.svg':'image/svg+xml','.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp'};
+let mutationRequests=0;
 const server=http.createServer(async(req,res)=>{
  const url=new URL(req.url,'http://localhost');
  if(url.pathname.startsWith('/api/')){
@@ -17,7 +18,7 @@ const server=http.createServer(async(req,res)=>{
   let items=fixtures[key];
   if(key==='vehicles')items=items.map(x=>({...x,startDate:url.searchParams.get('startDate'),endDate:url.searchParams.get('endDate'),withDriver:false}));
   res.setHeader('Content-Type','application/json');
-  if(req.method!=='GET'){res.statusCode=403;res.end(JSON.stringify({error:'Fixture server is read-only'}));return}
+  if(req.method!=='GET'){mutationRequests++;res.statusCode=403;res.end(JSON.stringify({error:'Fixture server is read-only'}));return}
   res.end(JSON.stringify(items?{items,provider:key==='vehicles'?'transport':key}:key==='health'?{status:'ok',bookingEnabled:false,providers:{hotel:true,wisata:true,transport:true}}:[]));return;
  }
  try{
@@ -127,8 +128,23 @@ try{
   report.push({viewport:width,page:'planner-filled',...cart,overflow:cart.scrollWidth>cart.width});
   checks.push({viewport:width,check:'Populated cart and responsive grid',passed:cart.items===3&&cart.columns===(width<=800?1:2)});
   await evaluate("state.cart=[];renderCart()");
+  // Provider handoff is a read-only entry point; use a fresh document and a future date.
+  const handoffDate=await evaluate("endDate(dateStr(new Date()),10)");
+  await call('Page.navigate',{url:base+'/?from=wisata&destinationId=1&visitDate='+handoffDate+'&keep=1#/itinerary'});
+  const handoffExpr="document.readyState==='complete'&&typeof jtApplyWisataHandoff==='function'&&document.querySelector('#detailDialog')?.open&&document.querySelector('#mDate')?.value==="+JSON.stringify(handoffDate)+"&&document.querySelector('#tripDate').value==="+JSON.stringify(handoffDate)+"&&location.search==='?keep=1'&&location.hash==='#/beranda'&&state.cart.length===0&&state.orders.length===0&&document.querySelector('#mStartTime').value===''&&document.querySelector('#mEndTime').value===''";
+  for(let i=0;i<100;i++){if(await evaluate(handoffExpr).catch(()=>false))break;await wait(100)}
+  checks.push({viewport:width,check:'Wisata handoff opens catalog detail with requested date, clean query and no automatic booking',passed:await evaluate(handoffExpr).catch(()=>false)});
+  const handoffImage=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
+  await fs.writeFile(path.join(out,width+'-wisata-handoff.png'),Buffer.from(handoffImage.data,'base64'));
+  const handoffInfo=await evaluate("({active:document.querySelector('.page.active')?.id,width:document.documentElement.clientWidth,scrollWidth:document.documentElement.scrollWidth})");
+  report.push({viewport:width,page:'wisata-handoff',...handoffInfo,overflow:handoffInfo.scrollWidth>handoffInfo.width});
+  await evaluate("document.querySelector('#detailDialog').close();jtApplyWisataHandoff();renderCatalog()");
+  checks.push({viewport:width,check:'Handoff is consumed once and does not change cart',passed:await evaluate("!document.querySelector('#detailDialog').open&&state.cart.length===0")});
+  await call('Page.navigate',{url:base+'/?from=wisata&destinationId=999999999999999#/beranda'});
+  for(let i=0;i<100;i++){if(await evaluate("document.readyState==='complete'&&typeof jtApplyWisataHandoff==='function'&&!state.catalogLoading&&location.search===''").catch(()=>false))break;await wait(100)}
+  checks.push({viewport:width,check:'Unknown Wisata ID does not open detail or mutate cart',passed:await evaluate("!document.querySelector('#detailDialog').open&&state.cart.length===0&&document.querySelector('#toast').textContent.includes('tidak ditemukan')").catch(()=>false)});
  }
- await fs.writeFile(path.join(out,'report.json'),JSON.stringify({fixture:true,report,checks,errors},null,2));
- console.log(JSON.stringify({screenshots:report.length,overflow:report.filter(x=>x.overflow),runtimeErrors:errors,checks:checks.map(({viewport,check,passed})=>({viewport,check,passed}))},null,2));
- if(errors.length||report.some(x=>x.overflow||x.active!==(x.page==='orders-filled'?'orders':x.page==='planner-filled'?'planner':['journey-day2','journey-filled'].includes(x.page)?'journey':x.page))||checks.some(x=>!x.passed))process.exitCode=1;
+ await fs.writeFile(path.join(out,'report.json'),JSON.stringify({fixture:true,report,checks,errors,mutationRequests},null,2));
+ console.log(JSON.stringify({screenshots:report.length,mutationRequests,overflow:report.filter(x=>x.overflow),runtimeErrors:errors,checks:checks.map(({viewport,check,passed})=>({viewport,check,passed}))},null,2));
+ if(mutationRequests||errors.length||report.some(x=>x.overflow||x.active!==(x.page==='wisata-handoff'?'explore':x.page==='orders-filled'?'orders':x.page==='planner-filled'?'planner':['journey-day2','journey-filled'].includes(x.page)?'journey':x.page))||checks.some(x=>!x.passed))process.exitCode=1;
 }finally{ws?.close();chrome.kill();server.close()}
