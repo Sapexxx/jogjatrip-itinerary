@@ -62,4 +62,5 @@ try{
  }
  await fs.writeFile(path.join(out,'report.json'),JSON.stringify({fixture:true,report,errors},null,2));
  console.log(JSON.stringify({screenshots:report.length,overflow:report.filter(x=>x.overflow),runtimeErrors:errors},null,2));
+ if(errors.length||report.some(x=>x.active!==x.page))process.exitCode=1;
 }finally{ws?.close();chrome.kill();server.close()}

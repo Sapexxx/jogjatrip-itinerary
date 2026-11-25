@@ -9,7 +9,7 @@ const dateStr=d=>{const x=new Date(d.getTime()-d.getTimezoneOffset()*60000);retu
 const today=new Date();$('#tripDate').min=dateStr(today);$('#tripDate').value=dateStr(new Date(today.getTime()+86400000*7));
 function toast(t){const el=$('#toast');el.textContent=t;el.style.display='block';clearTimeout(window.toastTimer);window.toastTimer=setTimeout(()=>el.style.display='none',5500)}
 async function request(path,opts={}){let res;try{res=await fetch(path,{headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts})}catch(e){throw Error('Tidak dapat terhubung ke server Itinerary Jogja')};let data;try{data=await res.json()}catch{throw Error('Respons server bukan JSON')};if(!res.ok)throw Error(data.error||`HTTP ${res.status}`);return data}
-function page(name){$$('.page').forEach(x=>x.classList.toggle('active',x.id===name));$('.navlink').forEach(x=>{const active=x.dataset.page===name;x.classList.toggle('active',active);if(active)x.setAttribute('aria-current','page');else x.removeAttribute('aria-current')});if(name==='planner')renderCart();if(name==='orders')renderOrders();document.querySelector('#'+name+' h1')?.focus({preventScroll:true});window.scrollTo({top:0,behavior:'smooth'})}
+function page(name){$$('.page').forEach(x=>x.classList.toggle('active',x.id===name));$$('.navlink').forEach(x=>{const active=x.dataset.page===name;x.classList.toggle('active',active);if(active)x.setAttribute('aria-current','page');else x.removeAttribute('aria-current')});if(name==='planner')renderCart();if(name==='orders')renderOrders();document.querySelector('#'+name+' h1')?.focus({preventScroll:true});window.scrollTo({top:0,behavior:'smooth'})}
 $$('[data-page]').forEach(x=>x.onclick=()=>page(x.dataset.page));$('#heroPlan').onclick=()=>page('planner');
 $$('[data-tab]').forEach(x=>x.onclick=()=>selectCatalogTab(x.dataset.tab));
 const region=()=>$('#region').value, tripDate=()=>$('#tripDate').value, guests=()=>Number($('#guests').value), nights=()=>Number($('#nights').value);
@@ -24,7 +24,7 @@ function exploreRentalDefaults(){
 }
 function exploreRentalDays(p){return Math.round((Date.parse(p.endDate+'T00:00:00Z')-Date.parse(p.startDate+'T00:00:00Z'))/86400000)+1}
 function selectCatalogTab(tab){
- state.tab=tab;$('[data-tab]').forEach(x=>{const active=x.dataset.tab===tab;x.classList.toggle('active',active);x.setAttribute?.('aria-pressed',String(active))});
+ state.tab=tab;$$('[data-tab]').forEach(x=>{const active=x.dataset.tab===tab;x.classList.toggle('active',active);x.setAttribute?.('aria-pressed',String(active))});
  renderCatalog();
  if(tab==='transport'||tab==='all'){
   if(!$('#exploreRentStart').value)exploreRentalDefaults();

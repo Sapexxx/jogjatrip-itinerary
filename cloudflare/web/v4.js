@@ -127,4 +127,4 @@ renderCatalog=function(){v4OldRenderCatalog();v4RenderFeatured()};
 v4LoadAllCatalogs();
 
 // Tema dan budget hanya menyaring kandidat katalog, bukan mengarang harga.
-document.querySelectorAll('[data-v4-theme]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-v4-theme]').forEach(x=>x.classList.toggle('active',x===b));v4Theme=b.dataset.v4Theme;v4RenderFeatured()}));
+document.querySelectorAll('[data-v4-theme]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-v4-theme]').forEach(x=>{x.classList.toggle('active',x===b);x.setAttribute('aria-pressed',String(x===b))});v4Theme=b.dataset.v4Theme;v4RenderFeatured()}));
