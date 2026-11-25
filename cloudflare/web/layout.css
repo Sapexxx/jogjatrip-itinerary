@@ -10,3 +10,7 @@ main{min-height:74vh}.page{display:none}.page.active{display:block}
 @media(max-width:800px){.nav-container{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--s-2);padding:var(--s-3)}.nav-container .brand{font-size:clamp(1rem,3vw,1.25rem);letter-spacing:-.035em;white-space:normal;min-width:0}.nav-side{gap:var(--s-2)}.nav-side .nav-cta{display:none}.mobile-nav-toggle{display:inline-flex}.navbar nav{grid-column:1/-1;order:initial;width:100%;height:auto;display:none;flex-direction:column;align-items:stretch;gap:var(--s-2);overflow:visible}.navbar nav[data-open="true"]{display:flex}.navlink{justify-content:flex-start;padding:var(--s-2) var(--s-3);border-radius:var(--r-sm)}.navlink.active{background:var(--green-100)}.navlink.active:after{display:none}.navlink .counter{margin-left:auto}}
 
 @media(max-width:600px){.filter.v4-search{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-2);padding:var(--s-3)}.filter.v4-search .dark{grid-column:1/-1}.filter.v4-search input,.filter.v4-search select{min-height:44px}.tile-visual{height:auto;aspect-ratio:3/2}.v4-package-cover{height:auto;aspect-ratio:3/2}}
+
+/* Match the initial URL before deferred application scripts run. */
+html[data-initial-page] .page{display:none}
+html[data-initial-page="explore"] #explore,html[data-initial-page="packages"] #packages,html[data-initial-page="planner"] #planner,html[data-initial-page="journey"] #journey,html[data-initial-page="orders"] #orders{display:block}

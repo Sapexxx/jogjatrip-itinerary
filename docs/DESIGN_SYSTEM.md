@@ -13,3 +13,7 @@ The first successful browser capture detected a 58px document overflow on the em
 ## Final audit rules
 
 Use the semantic tokens for new components; transitional compatibility colors remain only for legacy surfaces. Contrast script covers declared pairs; Lighthouse evaluates visible rendered content on five mobile routes, with accessibility and best-practices >= 95 and CLS < 0.1. Automated checks do not certify full WCAG compliance. Static images declare dimensions and alt text; preload existing hero JPG, use fixed aspect ratios and lazy-loading for secondary images. Keep an honest disclaimer and status text alongside icons. No dark mode in this scope.
+
+### CLS correction
+
+The first Lighthouse audit passed accessibility/best-practices on every route but home CLS was 0.102 and packages CLS 0.389. Initial route bootstrap prevents wrong-page flash, font-display optional avoids late swaps, and package first-row space is reserved while API data loads. No audit thresholds are relaxed. Results must be verified on the corrected commit.

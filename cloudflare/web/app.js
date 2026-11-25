@@ -30,7 +30,8 @@ function jtSetMenu(open){
 }
 function jtApplyRoute(route,{focus=true,scroll=true}={}){
  jtActiveRoute=route;jtAppliedHash=jtRouteHash(route.name,route.day);
- $$('.page').forEach(x=>x.classList.toggle('active',x.id===route.name));
+ $('.page').forEach(x=>x.classList.toggle('active',x.id===route.name));
+ document.documentElement?.removeAttribute?.('data-initial-page');
  $$('.navlink').forEach(x=>{const active=x.dataset.page===route.name;x.classList.toggle('active',active);if(active)x.setAttribute('aria-current','page');else x.removeAttribute('aria-current')});
  jtSetMenu(false);
  if(route.name==='planner')renderCart();

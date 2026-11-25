@@ -14,3 +14,5 @@ test('hero preload, accessible dialogs and private lookup token',()=>{
  assert.match(read('integrated.js'),/aria-label','Atur jadwal kegiatan'/);
  assert.match(read('cloudflare-status.js'),/health.bookingEnabled !== false/);
 });
+
+test('initial deep link is resolved before first paint and released by router',()=>{assert.match(read('index.html'),/<script src="\/route-bootstrap\.js"><\/script><\/head>/);assert.match(read('route-bootstrap.js'),/dataset.initialPage=page/);assert.match(read('app.js'),/removeAttribute\?\.\('data-initial-page'\)/);assert.match(read('layout.css'),/html\[data-initial-page="packages"\] #packages/);assert.match(read('index.html'),/display=optional/)});
