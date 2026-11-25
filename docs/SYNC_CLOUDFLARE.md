@@ -1,0 +1,5 @@
+# Frontend synchronization
+
+Canonical redesign target is `cloudflare/web/` on `feat/itinerary-jogja-ui` based on `cloudflare-deploy`. No production deploy before approval. Go `web/` is legacy: do not overwrite it with the transport-enabled Workers frontend. Port only compatible visual tokens and styles, then adapt individual markup/scripts and test Go separately. Keep technical repository, Worker name, routes, bindings, storage keys and CRS unchanged.
+
+Changed paths relative to production: `cloudflare/web/index.html`, `app.js`, `v2.js`, `packages.js`, `v4.js`, `integrated.js`, `orders.js`, `style.css`, `tokens.css`, `base.css`, `layout.css`, `components.css`, `accessibility.css`, `pages/{explore,itinerary,orders}.css`, `icons.svg`, `favicon.svg`; test/tool/workflow/documentation changes accompany frontend. Go `web/` remains untouched. Review with `git diff --name-status cloudflare-deploy...feat/itinerary-jogja-ui`, and check `git diff --name-status cloudflare-deploy...feat/itinerary-jogja-ui -- cloudflare/src cloudflare/wrangler.jsonc web` is empty before deployment. Production merge is a separate approval.

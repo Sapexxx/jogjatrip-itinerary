@@ -1,0 +1,2 @@
+:root{font-family:var(--font-body);color:var(--ink);background:var(--paper);font-synthesis:none}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0}button,input,select{font:inherit}button{cursor:pointer;transition:background .18s,transform .18s,box-shadow .18s}button:disabled{opacity:.52;cursor:not-allowed}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--amber-500);outline-offset:2px}h1,h2,h3,p{margin-top:0}h1,h2{letter-spacing:-.047em}a{color:inherit}

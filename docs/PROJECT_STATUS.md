@@ -44,3 +44,7 @@
 6. Pertahankan checkout nonaktif sampai pengujian integrasi booking dinyatakan aman.
 
 [Checklist Verifikasi](DEPLOYMENT_VERIFICATION.md) · [Panduan Deployment](DEPLOYMENT_CLOUDFLARE.md) · [README Utama](../README.md).
+
+## Redesign frontend — 25 November 2026
+
+Nama produk baru Itinerary Jogja. Draft PR #10 menargetkan `cloudflare-deploy`; repository/Worker/API tetap sama. Fase 0–5 telah melewati pengujian otomatis (commit Fase 5 `2497f1b`: 44/44 tes, 36 screenshot, 60/60 cek browser, 15/15 pasangan token, tanpa overflow/runtime error, dry-run berhasil). Fase 6 memperkenalkan gerbang Lighthouse dan final regression tests. Skor aktual harus dibaca dari artifact CI untuk commit terakhir, bukan dianggap lulus sebelumnya. Rental JogjaTrans tersedia di katalog Workers dengan harga/stok simulasi; Go legacy tidak mendukung rental. S6 Wisata capabilities HTTP 404 adalah temuan interoperabilitas terpisah. Tidak ada merge/deploy atau aktivasi booking dalam redesign. Audit manual, aset hero/paket berlisensi, dan pengujian transaksi live tidak boleh dianggap selesai hanya karena CI hijau.
