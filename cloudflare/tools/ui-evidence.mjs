@@ -30,13 +30,14 @@ const server=http.createServer(async(req,res)=>{
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const base='http://127.0.0.1:'+server.address().port;
 const profile=await fs.mkdtemp(path.join(os.tmpdir(),'itinerary-ui-'));
-const chrome=spawn(process.env.CHROME_BIN||'google-chrome',['--headless','--no-sandbox','--disable-dev-shm-usage','--remote-debugging-port=0','--remote-allow-origins=*','--user-data-dir='+profile,'about:blank'],{stdio:'ignore'});
+const chrome=spawn(process.env.CHROME_BIN||'google-chrome',['--headless','--no-sandbox','--disable-dev-shm-usage','--remote-debugging-port=0','--remote-allow-origins=*','--user-data-dir='+profile,'about:blank'],{stdio:['ignore','ignore','pipe']});
+let chromeLog='';chrome.stderr?.on('data',chunk=>{chromeLog=(chromeLog+chunk.toString()).slice(-6000)});
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
-let ws;const report=[];
+let ws;const report=[],checks=[];
 try{
  let port;
- for(let i=0;i<100;i++){try{port=(await fs.readFile(path.join(profile,'DevToolsActivePort'),'utf8')).split('\n')[0];break}catch{await wait(100)}}
- if(!port)throw Error('Chrome did not start');
+ for(let i=0;i<300;i++){try{port=(await fs.readFile(path.join(profile,'DevToolsActivePort'),'utf8')).split('\n')[0];break}catch{await wait(100)}}
+ if(!port)throw Error('Chrome did not start: '+chromeLog);
  const pages=await(await fetch('http://127.0.0.1:'+port+'/json/list')).json();
  const target=pages.find(x=>x.type==='page');
  ws=new WebSocket(target.webSocketDebuggerUrl);
@@ -51,16 +52,33 @@ try{
   await call('Page.navigate',{url:base});
   for(let i=0;i<80;i++){if(await evaluate("document.readyState==='complete'&&typeof page==='function'").catch(()=>false))break;await wait(100)}
   await wait(300);
+  // Assert the actual browser loaded every CSS module and rendered local SVG.
+  const sheetExpr="(()=>{const root=[...document.styleSheets].find(s=>s.href?.endsWith('/style.css'));if(!root)return [];return [...root.cssRules].filter(r=>r.type===3).map(r=>({href:r.href,loaded:!!r.styleSheet?.cssRules?.length}))})()";
+  const sheets=await evaluate(sheetExpr);
+  const expectedSheets=['base.css','layout.css','components.css','pages/explore.css','pages/itinerary.css','pages/orders.css','accessibility.css'];
+  const iconExpr="(()=>{const e=document.querySelector('.v4-service-icon svg use');try{const b=e?.getBBox();return !!b&&b.width>0&&b.height>0}catch{return false}})()";
+  let svg=false;for(let i=0;i<30&&!svg;i++){svg=await evaluate(iconExpr);if(!svg)await wait(100)}
+  checks.push({viewport:width,check:'CSS modules loaded',passed:expectedSheets.every(p=>sheets.some(s=>s.href?.endsWith(p)&&s.loaded)),sheets});
+  checks.push({viewport:width,check:'Local SVG visible',passed:svg});
   for(const name of ['explore','packages','planner','journey','orders']){
    await evaluate("page("+JSON.stringify(name)+");window.scrollTo(0,0);");
    await wait(200);
-   const info=await evaluate("({active:document.querySelector('.page.active')?.id,width:document.documentElement.clientWidth,scrollWidth:document.documentElement.scrollWidth,title:document.title})");
+   const info=await evaluate("({active:document.querySelector('.page.active')?.id,width:document.documentElement.clientWidth,scrollWidth:document.documentElement.scrollWidth,title:document.title,plannerColumns:document.querySelector('#planner .layout')&&getComputedStyle(document.querySelector('#planner .layout')).gridTemplateColumns})");
    const image=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
    await fs.writeFile(path.join(out,width+'-'+name+'.png'),Buffer.from(image.data,'base64'));
    report.push({viewport:width,page:name,...info,overflow:info.scrollWidth>info.width});
   }
+  // Exercise all three provider types in a populated cart, including long text.
+  await evaluate("state.cart=[{name:'Hotel contoh dengan nama panjang untuk memeriksa responsivitas',item:{type:'hotel',hotelId:'H1',roomId:'R1',checkIn:tripDate(),checkOut:endDate(tripDate(),2),guests:2,plannedStartTime:'14:00',plannedEndTime:'15:00'}},{name:'Destinasi wisata contoh dengan judul panjang',item:{type:'wisata',destinationId:1,visitDate:tripDate(),quantity:2,plannedStartTime:'09:00',plannedEndTime:'11:00'}},{name:'Kendaraan contoh JogjaTrans dengan nama panjang',item:{type:'transport',vehicleId:'V1',startDate:tripDate(),endDate:endDate(tripDate(),2),withDriver:false,plannedStartTime:'08:00',plannedEndTime:'09:00'}}];page('planner');window.scrollTo(0,0)");
+  await wait(250);
+  const cart=await evaluate("({active:document.querySelector('.page.active')?.id,width:document.documentElement.clientWidth,scrollWidth:document.documentElement.scrollWidth,items:document.querySelectorAll('#cartItems .cart-row').length,columns:getComputedStyle(document.querySelector('#planner .layout')).gridTemplateColumns.split(' ').length})");
+  const pic=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
+  await fs.writeFile(path.join(out,width+'-planner-filled.png'),Buffer.from(pic.data,'base64'));
+  report.push({viewport:width,page:'planner-filled',...cart,overflow:cart.scrollWidth>cart.width});
+  checks.push({viewport:width,check:'Populated cart and responsive grid',passed:cart.items===3&&cart.columns===(width<=800?1:2)});
+  await evaluate("state.cart=[];renderCart()");
  }
- await fs.writeFile(path.join(out,'report.json'),JSON.stringify({fixture:true,report,errors},null,2));
- console.log(JSON.stringify({screenshots:report.length,overflow:report.filter(x=>x.overflow),runtimeErrors:errors},null,2));
- if(errors.length||report.some(x=>x.active!==x.page))process.exitCode=1;
+ await fs.writeFile(path.join(out,'report.json'),JSON.stringify({fixture:true,report,checks,errors},null,2));
+ console.log(JSON.stringify({screenshots:report.length,overflow:report.filter(x=>x.overflow),runtimeErrors:errors,checks:checks.map(({viewport,check,passed})=>({viewport,check,passed}))},null,2));
+ if(errors.length||report.some(x=>x.overflow||x.active!==(x.page==='planner-filled'?'planner':x.page))||checks.some(x=>!x.passed))process.exitCode=1;
 }finally{ws?.close();chrome.kill();server.close()}

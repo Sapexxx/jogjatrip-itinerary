@@ -21,3 +21,11 @@ test('accessible local icon sprite and transport controls retain DOM contracts',
  for(const m of h.matchAll(/href="\/icons\.svg#([^"]+)"/g))assert.ok(icons.includes('id="'+m[1]+'"'));
  assert.doesNotMatch(h,/[⌂✧↝↗⚑✕↻↓✓]/);
 });
+
+test('responsive layout overrides follow page and component styles',()=>{
+ const entry=read('style.css');
+ assert.ok(entry.indexOf('./layout.css')>entry.indexOf('./components.css'));
+ assert.ok(entry.indexOf('./layout.css')>entry.indexOf('./pages/explore.css'));
+ assert.match(read('layout.css'),/@media\(max-width:800px\).*?\.layout\{grid-template-columns:minmax\(0,1fr\)/s);
+ assert.match(read('components.css'),/grid-template-columns:minmax\(0,1.5fr\) minmax\(0,1fr\)/);
+});

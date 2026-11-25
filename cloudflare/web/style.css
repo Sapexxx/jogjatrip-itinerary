@@ -1,7 +1,7 @@
 @import url("./base.css");
-@import url("./layout.css");
 @import url("./components.css");
 @import url("./pages/explore.css");
 @import url("./pages/itinerary.css");
 @import url("./pages/orders.css");
+@import url("./layout.css");
 @import url("./accessibility.css");

@@ -5,3 +5,7 @@ Product name: Itinerary Jogja. Editorial travel identity; use green/amber with w
 ## Phase 2
 
 CSS is loaded from `style.css` using local imports for base, layout, components, explore/packages, itinerary, orders and accessibility. Colors use semantic design tokens; uncommon legacy gradients and surfaces use transitional `--compat-color-*` tokens to limit visual regressions, pending visual consolidation. Responsive rules use 600, 800 and 1100px. Local SVG sprite `icons.svg` provides 24x24 icons with 1.75 stroke; existing DOM and action labels remain. No external icon dependencies. Standard component aliases `.btn`, `.card`, `.field`, `.dialog`, `.toast` are available alongside legacy selectors. Full computed contrast and manual review remain outstanding.
+
+### Phase 2 responsive correction
+
+The first successful browser capture detected a 58px document overflow on the empty planner at 375px. The split stylesheet initially loaded layout media queries before component and page defaults. Layout now loads after those defaults; planner tracks use minmax(0, ...) and narrow cart actions wrap. Browser CI must fail on document overflow, missing local styles or SVG, runtime errors, or incorrect planner grid. It also captures a populated mock cart at all four viewports. These are automated fixture checks, not a manual WCAG or Lighthouse certification.
