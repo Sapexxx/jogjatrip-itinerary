@@ -9,3 +9,7 @@ CSS is loaded from `style.css` using local imports for base, layout, components,
 ### Phase 2 responsive correction
 
 The first successful browser capture detected a 58px document overflow on the empty planner at 375px. The split stylesheet initially loaded layout media queries before component and page defaults. Layout now loads after those defaults; planner tracks use minmax(0, ...) and narrow cart actions wrap. Browser CI must fail on document overflow, missing local styles or SVG, runtime errors, or incorrect planner grid. It also captures a populated mock cart at all four viewports. These are automated fixture checks, not a manual WCAG or Lighthouse certification.
+
+## Final audit rules
+
+Use the semantic tokens for new components; transitional compatibility colors remain only for legacy surfaces. Contrast script covers declared pairs; Lighthouse evaluates visible rendered content on five mobile routes, with accessibility and best-practices >= 95 and CLS < 0.1. Automated checks do not certify full WCAG compliance. Static images declare dimensions and alt text; preload existing hero JPG, use fixed aspect ratios and lazy-loading for secondary images. Keep an honest disclaimer and status text alongside icons. No dark mode in this scope.
