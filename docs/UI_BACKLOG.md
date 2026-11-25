@@ -11,3 +11,5 @@
 - Interoperability: last independently observed 15/16 tests, S6 Wisata capabilities outstanding; redesign cannot alter that result or enable booking.
 
 - Phase 3 decision: retain Pilihan Saya as a separate entry so existing cart/quote flow remains intact. Mobile uses an accessible disclosure (five native links), not a duplicate bottom bar. Phase 4 will refine the existing day selection into the new timeline; public hash links navigate local itinerary views only.
+
+- Phase 5: JogjaTrans is available in the live catalog (not 'Belum tersedia' as in the original prompt); checkout remains gated. Existing three repository photos retained with editorial crops; six unique licensed landscape photos and a high-resolution hero remain asset requests. No new image sources or fake catalog content introduced.

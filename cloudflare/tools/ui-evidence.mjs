@@ -68,6 +68,18 @@ try{
    await fs.writeFile(path.join(out,width+'-'+name+'.png'),Buffer.from(image.data,'base64'));
    report.push({viewport:width,page:name,...info,overflow:info.scrollWidth>info.width});
   }
+  // Editorial catalog and service CTA contracts in a real browser.
+  await evaluate("page('explore')");
+  checks.push({viewport:width,check:'Hero and three service entry points',passed:await evaluate("(()=>{const h=document.querySelector('.hero-art img');return !!h&&h.complete&&h.naturalWidth>0&&document.querySelectorAll('[data-v4-service]').length===3&&!!document.querySelector('#heroExplore')})()")});
+  await evaluate("document.querySelector('[data-v4-service=transport]').click()");
+  checks.push({viewport:width,check:'Transport CTA opens the shared catalog',passed:await evaluate("state.tab==='transport'&&document.querySelector('[data-tab=transport]').getAttribute('aria-pressed')==='true'")});
+  await evaluate("selectCatalogTab('all');page('orders');jdRender({order:{id:'FIXTURE',status:'PARTIAL',total:200000,items:[{item:{type:'transport',vehicleId:'V1',startDate:tripDate(),endDate:endDate(tripDate(),1),withDriver:false},status:'CONFIRMED',amount:200000}]},details:[{index:0,name:'Mobil contoh',productName:'Mobil'}]})");
+  const orderInfo=await evaluate("({active:document.querySelector('.page.active').id,width:document.documentElement.clientWidth,scrollWidth:document.documentElement.scrollWidth,transport:document.querySelector('.jd-item').textContent.includes('Mulai sewa'),status:!!document.querySelector('.jd-item .status svg'),disclaimer:!!document.querySelector('.jd-order .jt-disclaimer')})");
+  checks.push({viewport:width,check:'Transport order shows dates, status icon and disclaimer',passed:orderInfo.transport&&orderInfo.status&&orderInfo.disclaimer});
+  const orderImage=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
+  await fs.writeFile(path.join(out,width+'-orders-filled.png'),Buffer.from(orderImage.data,'base64'));
+  report.push({viewport:width,page:'orders-filled',...orderInfo,overflow:orderInfo.scrollWidth>orderInfo.width});
+  await evaluate("document.querySelector('#lookupResult').innerHTML='';page('explore')");
   // Real link clicks, browser history, deep-link day selection, and mobile disclosure.
   const navCheck=await evaluate("(()=>{page('explore');const menu=document.querySelector('#mobileNavToggle'),nav=document.querySelector('#mainNav');const mobile=matchMedia('(max-width:800px)').matches;let disclosure=true;if(mobile){disclosure=getComputedStyle(nav).display==='none';menu.click();disclosure=disclosure&&menu.getAttribute('aria-expanded')==='true'&&getComputedStyle(nav).display!=='none';nav.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));disclosure=disclosure&&menu.getAttribute('aria-expanded')==='false'&&document.activeElement===menu;menu.click()}nav.querySelector('[data-page=packages]').click();return {disclosure,active:document.querySelector('.page.active').id,hash:location.hash,aria:nav.querySelector('[aria-current=page]')?.dataset.page,closed:menu.getAttribute('aria-expanded')==='false',focus:document.activeElement===document.querySelector('#packages h1')}})()");
   checks.push({viewport:width,check:'Native navigation, mobile disclosure, focus and ARIA',passed:navCheck.disclosure&&navCheck.active==='packages'&&navCheck.hash==='#/paket'&&navCheck.aria==='packages'&&navCheck.closed&&navCheck.focus});
@@ -118,5 +130,5 @@ try{
  }
  await fs.writeFile(path.join(out,'report.json'),JSON.stringify({fixture:true,report,checks,errors},null,2));
  console.log(JSON.stringify({screenshots:report.length,overflow:report.filter(x=>x.overflow),runtimeErrors:errors,checks:checks.map(({viewport,check,passed})=>({viewport,check,passed}))},null,2));
- if(errors.length||report.some(x=>x.overflow||x.active!==(x.page==='planner-filled'?'planner':['journey-day2','journey-filled'].includes(x.page)?'journey':x.page))||checks.some(x=>!x.passed))process.exitCode=1;
+ if(errors.length||report.some(x=>x.overflow||x.active!==(x.page==='orders-filled'?'orders':x.page==='planner-filled'?'planner':['journey-day2','journey-filled'].includes(x.page)?'journey':x.page))||checks.some(x=>!x.passed))process.exitCode=1;
 }finally{ws?.close();chrome.kill();server.close()}
