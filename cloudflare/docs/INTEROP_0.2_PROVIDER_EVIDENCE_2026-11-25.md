@@ -45,3 +45,25 @@ The Transport repository also has `ops/deploy-interop-02-staging` and `ops/relea
 - Local synthetic tests cannot establish real provider readiness; the decision file below is designed to prevent treating them as such.
 
 **Decision:** I6 live transaction **NO-GO**. I6 planning, sandbox accounts, mock compatibility analysis and provider-owner handoff **GO**.
+
+## Read-only staging verifier (explicit approval, no booking)
+
+After each provider owner grants access to an **isolated sandbox**, use:
+```bash
+cd cloudflare
+# Set these as private environment variables in an approved staging runner,
+# not in .env committed to Git, PR comments or console history:
+export INTEROP_STAGING_READONLY_ACK=APPROVED_SANDBOX_ONLY
+export INTEROP_STAGING_PROVIDERS=transport
+export INTEROP_STAGING_ALLOW_ORIGINS=https://transport.example.invalid
+export INTEROP_STAGING_TRANSPORT_URL=https://transport.example.invalid/
+export INTEROP_STAGING_TRANSPORT_TOKEN="<obtain securely from provider owner>"
+export INTEROP_STAGING_START_DATE=2026-12-12
+export INTEROP_STAGING_END_DATE=2026-12-14
+npm run check:interop-readonly-staging
+```
+Replace the placeholder host with **the provider-approved sandbox origin** and use only provider-authorized test credentials. The CLI checks one or more explicitly allowlisted HTTPS origins and permits only `GET /api/v1/interop/capabilities` and `GET /api/v1/interop/offers`. It does not invoke HOLD/CONFIRM/RELEASE, write D1, reveal the token or treat URL configuration as health evidence. A failed parser remains a failed contract check, not a reason to weaken I1.
+
+Never run this verifier using production partner credentials/origins. Do not run without explicit provider-owner staging permission. The commands above are instructions only; no live request was executed in this audit.
+
+The synthetic, source-derived compatibility tests in `tests/interop-provider-evidence.test.mjs` reproduce the observed transport draft gaps and prove the strict I1 client rejects them safely. Those tests cannot verify current deployment state; retain the exact provider source SHA in any future evidence record.
