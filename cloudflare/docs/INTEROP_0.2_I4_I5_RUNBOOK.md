@@ -13,7 +13,7 @@ This document describes **safe observations and stopping rules** for Contract 0.
 
 - No production server-injected trusted `verifySelection`. The preparation route correctly responds `TRUSTED_SELECTION_VERIFIER_REQUIRED` and does not create a plan checkout.
 - The browser's draft key is not a persisted D1 checkout and does not secure or store the caller-generated 32-byte D1 token. End-to-end browser custody is not complete.
-- I4 `confirm()` remains isolated; no server-authenticated payment/confirmation policy. Never treat a HOLD as a payment.
+- I4 `hold()` and `confirm()` require explicit server-injected `authorizeHold`/`authorizeConfirm` policies; production injects neither. No server-authenticated payment/confirmation policy exists. Never treat a HOLD as a payment.
 - No operator-authenticated recovery route. `reconcile()` requires an injected `authorizeRecovery` callback and independently established quiescence. It does not issue mutating POSTs.
 - No unconditional recovery of unknown provider state and no automatic transaction retry.
 - Cart/package integration remains distinct; saved-plan-only preparation is the currently tested source.
@@ -42,3 +42,7 @@ The authenticated saved plan, not the browser request, is the source of items. A
 ## Release gate (not yet met)
 
 Before I6 live booking, independently validate provider contracts, design a browser credential handoff, agree payment/CONFIRM policy, build authenticated operator recovery, anti-double-submit and rate controls, run provider sandbox tests and capture artifacts. Keep `BOOKING_ENABLED=false` and PRs in Draft until then.
+
+## Additional mutation guards
+
+The saga now defaults to refusing `hold()` and `confirm()` unless trusted callbacks `authorizeHold(orderId)` and `authorizeConfirm(orderId)` are configured and return exactly true. Synthetic unit tests inject these callbacks; they do not represent production authorization. Reconciliation separately requires `authorizeRecovery`. No Worker production route currently injects any of these capabilities. Enabling a future policy requires verifiable owner/consent and provider capability evidence for HOLD, and explicit independent confirmation/payment authorization for CONFIRM.
