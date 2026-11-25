@@ -14,10 +14,13 @@ const offer=(item=baseItem)=>({provider:item.type,entityType:item.type==='hotel'
 const error=code=>e=>e instanceof JournalError&&e.code===code;
 const migration=n=>readFileSync(new URL('../migrations/'+n,import.meta.url),'utf8');
 function openFixture(persist){
- return new Miniflare(convertV4MiniflareOptions({
-  modules:true,script:'export default {fetch(){return new Response("fixture only")}}',
-  d1Databases:{DB:'i3-local-fixture'},...(persist?{d1Persist:persist}:{})
- }));
+ return new Miniflare({
+  ...convertV4MiniflareOptions({
+   modules:true,script:'export default {fetch(){return new Response("fixture only")}}',
+   d1Databases:{DB:'i3-local-fixture'}
+  }),
+  ...(persist?{resourcePersistencePath:persist}:{})
+ });
 }
 async function applyMigration(db,n){
  for(const s of migration(n).replace(/^--.*$/gm,'').split(';').map(x=>x.trim()).filter(Boolean))await db.prepare(s).run();
