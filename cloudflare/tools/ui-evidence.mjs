@@ -93,6 +93,19 @@ try{
   checks.push({viewport:width,check:'Unavailable day shows explicit notice',passed:await evaluate("!document.querySelector('#ibDayNotice').hidden&&document.querySelector('#ibDayNotice').textContent.includes('Hari 16')")});
   await evaluate("page('journey');document.querySelector('.skip-link').click()");
   checks.push({viewport:width,check:'Skip link preserves route and moves focus',passed:await evaluate("location.hash==='#/itinerary'&&document.activeElement.id==='mainContent'")});
+  // Local timeline fixture, including overlapping activities and locked provider booking.
+  await evaluate("page('journey');planState.activities=[{type:'hotel',title:'Hotel contoh',date:idate(),startTime:'09:00',endTime:'11:00',sourceItem:{type:'hotel',hotelId:'H1',roomId:'R1',checkIn:idate(),checkOut:endDate(idate(),2),guests:2}},{type:'wisata',title:'Wisata contoh',date:idate(),startTime:'10:00',endTime:'12:00',sourceItem:{type:'wisata',destinationId:1,visitDate:idate(),quantity:2}},{type:'transport',title:'Kendaraan contoh',date:idate(),startTime:'08:00',endTime:'09:00',orderId:'fixture-order',bookingStatus:'CONFIRMED',sourceItem:{type:'transport',vehicleId:'V1',startDate:idate(),endDate:endDate(idate(),2),withDriver:false}}];integratedRender()");
+  await wait(150);
+  const timeline=await evaluate("({cards:document.querySelectorAll('.ib-timeline-card').length,boundaries:document.querySelectorAll('.ib-boundary').length,conflict:!!document.querySelector('.ib-conflict'),locked:!document.querySelector('[data-ib-edit=\"2\"]'),ticket:document.querySelector('#ibTicket').textContent.includes('Hotel contoh'),width:document.documentElement.clientWidth,scrollWidth:document.documentElement.scrollWidth,active:document.querySelector('.page.active').id})");
+  checks.push({viewport:width,check:'Timeline conflict, check-out, return, locked booking and ticket',passed:timeline.cards===3&&timeline.boundaries===2&&timeline.conflict&&timeline.locked&&timeline.ticket});
+  const timelineImage=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
+  await fs.writeFile(path.join(out,width+'-journey-filled.png'),Buffer.from(timelineImage.data,'base64'));
+  report.push({viewport:width,page:'journey-filled',...timeline,overflow:timeline.scrollWidth>timeline.width});
+  await evaluate("(()=>{const x=document.querySelector('[data-ib-move=\"1\"]');x.value=endDate(idate(),1);x.dispatchEvent(new Event('change'))})()");
+  checks.push({viewport:width,check:'Move activity updates provider date and day hash',passed:await evaluate("planState.activities[1].date===endDate(idate(),1)&&planState.activities[1].sourceItem.visitDate===planState.activities[1].date&&location.hash==='#/itinerary/hari-2'")});
+  await evaluate("page('journey');document.querySelector('#planNew').click()");
+  checks.push({viewport:width,check:'Native confirmation dialog opens and cancels without data loss',passed:await evaluate("(()=>{const d=document.querySelector('dialog[open]');if(!d)return false;d.querySelector('[data-cancel]').click();return planState.activities.length===3})()")});
+  await evaluate("planState.activities=[];integratedRender()");
   // Exercise all three provider types in a populated cart, including long text.
   await evaluate("state.cart=[{name:'Hotel contoh dengan nama panjang untuk memeriksa responsivitas',item:{type:'hotel',hotelId:'H1',roomId:'R1',checkIn:tripDate(),checkOut:endDate(tripDate(),2),guests:2,plannedStartTime:'14:00',plannedEndTime:'15:00'}},{name:'Destinasi wisata contoh dengan judul panjang',item:{type:'wisata',destinationId:1,visitDate:tripDate(),quantity:2,plannedStartTime:'09:00',plannedEndTime:'11:00'}},{name:'Kendaraan contoh JogjaTrans dengan nama panjang',item:{type:'transport',vehicleId:'V1',startDate:tripDate(),endDate:endDate(tripDate(),2),withDriver:false,plannedStartTime:'08:00',plannedEndTime:'09:00'}}];page('planner');window.scrollTo(0,0)");
   await wait(250);
@@ -105,5 +118,5 @@ try{
  }
  await fs.writeFile(path.join(out,'report.json'),JSON.stringify({fixture:true,report,checks,errors},null,2));
  console.log(JSON.stringify({screenshots:report.length,overflow:report.filter(x=>x.overflow),runtimeErrors:errors,checks:checks.map(({viewport,check,passed})=>({viewport,check,passed}))},null,2));
- if(errors.length||report.some(x=>x.overflow||x.active!==(x.page==='planner-filled'?'planner':x.page==='journey-day2'?'journey':x.page))||checks.some(x=>!x.passed))process.exitCode=1;
+ if(errors.length||report.some(x=>x.overflow||x.active!==(x.page==='planner-filled'?'planner':['journey-day2','journey-filled'].includes(x.page)?'journey':x.page))||checks.some(x=>!x.passed))process.exitCode=1;
 }finally{ws?.close();chrome.kill();server.close()}

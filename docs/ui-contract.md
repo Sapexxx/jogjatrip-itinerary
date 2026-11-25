@@ -55,3 +55,7 @@ Preserve existing IDs, data attributes, selectors, API paths, storage keys, esca
 ## Phase 3 navigation contract
 
 `page(name, day=null)` remains the public JS entry point. `data-page` stays on the five native nav anchors and existing CTAs. `jtRouteHash`, `jtParseRoute` and `jtActiveRoute` contain only public page/day navigation. `#mainNav` and `#mobileNavToggle` implement mobile disclosure. `#ibDayNav`, `#ibDayNotice`, `data-ib-day`, `data-ib-day-link` and `#ibDayHeadingN` select a local day without changing activity data. `#/itinerary/hari-N` supports 1–16; unavailable days display a notice and all currently available days. The route is not a public share of saved plan contents; no token, ID or personal data is placed in the URL. Existing cart, package and order side effects remain.
+
+## Phase 4 timeline
+
+Existing `#ibDays`, day navigation, `data-ib-edit`, `#ibSelected`, booking and quote IDs are preserved. `#ibTripMeta`, `#ibEstimate`, `#ibTicket`, `#ibManual`, `#ibAnalyze`, `#ibCopy`, `#ibPrint`, `data-ib-move`, `data-ib-order`, `data-ib-travel` and `data-ib-add-day` are frontend-only. Return/check-out cards are projections, never additional booking items. Reordering preserves clock values; move-day changes provider dates only for unbooked items. Optional travel minutes use the existing notes field; no new API schema or secret storage. Estimates use available catalog prices only, and exclude already-booked services; final quote remains provider-owned. Public hash is navigation only.
