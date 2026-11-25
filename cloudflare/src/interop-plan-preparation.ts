@@ -39,8 +39,15 @@ export function createInteropPlanPreparation(
    try{prior=await journal.lookupCheckoutByKey(input.key,input.accessToken)}
    catch(e){if(!(e instanceof JournalError&&e.status===404))throw e}
    if(prior){
+    // A successful replay must not silently accept changed customer/consent.
+    // Recovery uses the original credential pair, but may not rewrite the
+    // durable checkout or disclose its data to a changed request.
+    const original=prior.intent.customer;
     if(prior.intent.source.kind!=='plan'||prior.intent.source.id!==planId)
      throw new PreparationError('SOURCE_CONFLICT',409);
+    if(original.name!==input.customer.name||original.phone!==input.customer.phone||
+       (original.email??undefined)!==(input.customer.email??undefined))
+     throw new PreparationError('IDEMPOTENCY_CONFLICT',409);
     return {orderId:prior.orderId,created:false,state:'NOT_STARTED' as const,bookingPerformed:false};
    }
    if(owner.orderLock)throw new PreparationError('PLAN_LOCKED',409);
