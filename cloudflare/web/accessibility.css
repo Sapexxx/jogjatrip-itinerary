@@ -17,3 +17,7 @@ html{scroll-padding-top:96px}body{font-size:var(--fs-sm);line-height:var(--lh-bo
 /* Phase 6 final: stable initial builder, and semantic heading levels. */
 #planner .panelhead h2,#planner .summary h2,#orders .orderpanel>h2,#orders .jd-history-title h2{font-size:var(--fs-lg);font-family:var(--font-display);margin:0 0 var(--s-3);line-height:1.3}#orders .jd-head h2{font-size:var(--fs-xl);margin:var(--s-2) 0;line-height:1.3}#ibHotelOptions{min-block-size:120px}#ibHotelOptions .jt-skeleton{max-width:100%;margin-bottom:var(--s-2)}
 @media(max-width:600px){#ibHotelOptions{min-block-size:260px}.ib-intro{min-height:150px}.ib-toolbar{min-height:220px}}
+
+/* Keep empty history/cart and lookup controls in their final first-paint positions. */
+#orderList>.empty,#cartItems>.empty{min-block-size:200px;padding:var(--s-6) var(--s-4);display:flex;flex-direction:column;justify-content:center;line-height:1.6}#orderList>.empty strong,#cartItems>.empty strong{line-height:1.35}#orders .orderpanel>h2,#planner .panelhead h2{line-height:1.3}#orders .fields label,#planner .fields label{line-height:1.5}
+@media(max-width:600px){#orderList>.empty{min-block-size:224px}#cartItems>.empty{min-block-size:200px}}
