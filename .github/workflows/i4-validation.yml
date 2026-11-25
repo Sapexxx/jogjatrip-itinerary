@@ -1,7 +1,7 @@
 name: I4 Hold Saga validation
 on:
   push:
-    branches: [feat/interop-saga-i4]
+    branches: [feat/interop-saga-i4, feat/interop-client-i5]
   workflow_dispatch:
 permissions:
   contents: read
