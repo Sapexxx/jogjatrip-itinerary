@@ -1,0 +1,46 @@
+name: I4 Hold Saga validation
+on:
+  push:
+    branches: [feat/interop-saga-i4]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  saga:
+    name: I4 journal and saga regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned Worker dependencies
+        working-directory: cloudflare
+        run: npm ci --no-audit --no-fund
+      - name: Run entire Worker test suite
+        working-directory: cloudflare
+        run: npm test
+      - name: TypeScript static type check
+        working-directory: cloudflare
+        run: npm run typecheck
+      - name: Check Worker entrypoint
+        working-directory: cloudflare
+        run: |
+          node --experimental-strip-types --check src/index.ts
+          for file in web/*.js; do node --check "$file"; done
+      - name: Wrangler dry-run (no deployment)
+        working-directory: cloudflare
+        run: |
+          sed -i 's/REPLACE_WITH_REAL_D1_DATABASE_ID/00000000-0000-4000-8000-000000000000/' wrangler.jsonc
+          npx wrangler deploy --dry-run --outdir /tmp/jogjatrip-i4-worker-build
+  go:
+    name: I4 Go regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - run: go vet ./...
+      - run: go test -count=1 ./...
