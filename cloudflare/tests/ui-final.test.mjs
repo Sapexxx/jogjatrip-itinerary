@@ -16,3 +16,5 @@ test('hero preload, accessible dialogs and private lookup token',()=>{
 });
 
 test('initial deep link is resolved before first paint and released by router',()=>{assert.match(read('index.html'),/<script src="\/route-bootstrap\.js"><\/script><\/head>/);assert.match(read('route-bootstrap.js'),/dataset.initialPage=page/);assert.match(read('app.js'),/removeAttribute\?\.\('data-initial-page'\)/);assert.match(read('layout.css'),/html\[data-initial-page="packages"\] #packages/);assert.match(read('index.html'),/display=optional/)});
+
+test('builder has a static first-paint structure and semantic page headings',()=>{const h=read('index.html');for(const id of ['ibDate','ibNights','ibHotelOptions','ibDays','ibSave','ibQuote','ibBook','ibTicket'])assert.ok(h.includes('id="'+id+'"'),id);assert.match(h,/<h2>Periksa kode pesanan<\/h2>/);assert.match(h,/<h2>Rencana perjalanan<\/h2>/);assert.doesNotMatch(read('integrated.js'),/box\.innerHTML=`<div class="ib-intro"/)});

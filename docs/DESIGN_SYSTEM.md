@@ -17,3 +17,5 @@ Use the semantic tokens for new components; transitional compatibility colors re
 ### CLS correction
 
 The first Lighthouse audit passed accessibility/best-practices on every route but home CLS was 0.102 and packages CLS 0.389. Initial route bootstrap prevents wrong-page flash, font-display optional avoids late swaps, and package first-row space is reserved while API data loads. No audit thresholds are relaxed. Results must be verified on the corrected commit.
+
+The next audit exposed a router selector regression and a 0.507 CLS on the itinerary route (manual editor displaced by injected builder). Fixed the collection selector, moved initial builder structure into static HTML, reserved space for loading hotel content, corrected heading levels, and made console errors an explicit Lighthouse failure. Browser and Lighthouse gates must pass on the new head.

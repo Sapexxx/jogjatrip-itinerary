@@ -40,7 +40,7 @@ try{
    const a=report.categories.accessibility.score,b=report.categories['best-practices'].score,p=report.categories.performance.score,cls=report.audits['cumulative-layout-shift'].numericValue;
    const failures=[];
    for(const category of ['accessibility','best-practices'])for(const ref of report.categories[category].auditRefs){const audit=report.audits[ref.id];if(ref.weight>0&&audit?.score!==null&&audit?.score<1)failures.push({id:ref.id,score:audit.score,nodes:(audit.details?.items||[]).slice(0,12).map(x=>({selector:x.node?.selector,snippet:x.node?.snippet,summary:x.node?.explanation||x.description||x.url}))})}
-   const passed=Number.isFinite(a)&&a>=.95&&Number.isFinite(b)&&b>=.95&&Number.isFinite(cls)&&cls<.1&&!report.runtimeError;
+   const passed=Number.isFinite(a)&&a>=.95&&Number.isFinite(b)&&b>=.95&&Number.isFinite(cls)&&cls<.1&&!report.runtimeError&&report.audits['errors-in-console']?.score===1;
    const shiftAudits=['layout-shift-elements','cls-culprits-insight','font-display-insight'];const shifts=Object.fromEntries(shiftAudits.filter(k=>report.audits[k]?.details).map(k=>[k,JSON.stringify(report.audits[k].details).slice(0,2400)]));
    const result={route,accessibility:a,bestPractices:b,performance:p,cls,passed,failures,shifts};results.push(result);
    console.log('LIGHTHOUSE '+JSON.stringify(result));
