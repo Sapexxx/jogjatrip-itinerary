@@ -16,7 +16,7 @@ export class PreparationError extends Error {
  readonly status:number;readonly code:string;
  constructor(code:string,status=409){super(code);this.name='PreparationError';this.code=code;this.status=status}
 }
-type PreparedInput={key:string;accessToken:string;consent:true;customer:{name:string;phone:string;email?:string}};
+type PreparedInput={key:string;accessToken:string;consent:true;approvedTotal:number;customer:{name:string;phone:string;email?:string}};
 const keyPattern=/^[A-Za-z0-9_-]{16,100}$/;
 const tokenPattern=/^[a-f0-9]{64}$/;
 export function createInteropPlanPreparation(
@@ -31,7 +31,7 @@ export function createInteropPlanPreparation(
    // Owner authentication precedes any lookup, provider request or mutation.
    const owner=await authorizedPlan(env,planId,request);
    if(!input||!keyPattern.test(input.key)||!tokenPattern.test(input.accessToken)||
-      input.consent!==true||!input.customer||typeof input.customer!=='object')
+      input.consent!==true||!Number.isSafeInteger(input.approvedTotal)||input.approvedTotal<0||!input.customer||typeof input.customer!=='object')
     throw new PreparationError('INVALID_CHECKOUT_INPUT',400);
    // Original key/token lets the owner recover an ID after a lost HTTP response,
    // without repeating preflight or creating a second logical order.
@@ -46,7 +46,8 @@ export function createInteropPlanPreparation(
     if(prior.intent.source.kind!=='plan'||prior.intent.source.id!==planId)
      throw new PreparationError('SOURCE_CONFLICT',409);
     if(original.name!==input.customer.name||original.phone!==input.customer.phone||
-       (original.email??undefined)!==(input.customer.email??undefined))
+       (original.email??undefined)!==(input.customer.email??undefined)||
+       prior.intent.items.reduce((sum,i)=>sum+i.expectedTotal,0)!==input.approvedTotal)
      throw new PreparationError('IDEMPOTENCY_CONFLICT',409);
     return {orderId:prior.orderId,created:false,state:'NOT_STARTED' as const,bookingPerformed:false};
    }
@@ -76,6 +77,11 @@ export function createInteropPlanPreparation(
      if(!o.ok)throw new PreparationError('PREFLIGHT_NOT_VERIFIED',409);
      return o.offer;
     });
+    // Explicit customer price acceptance is mandatory. Browser quote is not
+    // an authority; exact fresh provider total must match the accepted amount.
+    const actualTotal=offers.reduce((sum,offer)=>sum+offer.totalPrice,0);
+    if(!Number.isSafeInteger(actualTotal)||actualTotal!==input.approvedTotal)
+     throw new PreparationError('PRICE_CHANGED',409);
     const intent:CheckoutIntent={
      source:{kind:'plan',id:planId},customer:input.customer,consent:true,
      items:items.map((item,i)=>({item,expectedTotal:offers[i].totalPrice}))
