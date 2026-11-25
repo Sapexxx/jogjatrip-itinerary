@@ -19,6 +19,9 @@ export interface WorkerEnv {
   HOTEL_PARTNER_TOKEN?: string;
   WISATA_PARTNER_TOKEN?: string;
   BOOKING_ENABLED?: string;
+  // I2: opt-in only; absent is false. Not wired to production routes yet.
+  INTEROP_HOLDS?: string;
+  TRANSPORT_PARTNER_TOKEN?: string;
 }
 export type ProviderKind = 'hotel' | 'wisata' | 'transport';
 export type ReservationStatus =
