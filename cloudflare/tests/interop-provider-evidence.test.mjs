@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {createInteropClient,InteropError} from '../src/interop.ts';
 import {TOKEN,KEY,mockProvider} from './fixtures/interop-provider.mjs';
 
@@ -58,4 +60,37 @@ test('provider evidence: production booking remains disabled and only a source-a
  const evidence=readFileSync(new URL('../docs/INTEROP_0.2_PROVIDER_EVIDENCE_2026-11-25.md',import.meta.url),'utf8');
  assert.match(config,/"BOOKING_ENABLED"\s*:\s*"false"/);
  for(const needed of ['JogjaTrans','JogjaStay','Wisata Jogja','NO-GO'])assert.ok(evidence.includes(needed));
+});
+
+test('provider evidence: transport draft hold body rejects canonical quantity and must not be silently retried',async()=>{
+ const seen=[];
+ const client=make(async(_,init)=>{
+  seen.push({method:init.method,body:JSON.parse(init.body)});
+  return new Response(JSON.stringify({code:'BAD_JSON',message:'Invalid hold request'}),{status:400,headers:{'Content-Type':'application/json'}});
+ });
+ await assert.rejects(client.hold({offerId:'signed-transport-offer',quantity:1,customer:{name:'Fixture User',phone:'0800000000'},
+  externalRef:'JT-EXAMPLE-01',consent:true},KEY),e=>e instanceof InteropError&&e.outcomeUnknown===true);
+ assert.equal(seen.length,1);assert.equal(seen[0].body.quantity,1);
+});
+test('provider evidence: unsupported provider status 409 INVALID_OFFER stays UNKNOWN until contract approval',async()=>{
+ const c=make(async()=>new Response(JSON.stringify({code:'INVALID_OFFER',message:'Draft offer expired'}),{status:409}));
+ await assert.rejects(c.hold({offerId:'old-signed-offer',quantity:1,customer:{name:'Fixture User',phone:'0800000000'},
+  externalRef:'JT-EXAMPLE-02',consent:true},KEY),e=>e instanceof InteropError&&e.code==='INVALID_OFFER'&&e.outcomeUnknown===true);
+});
+test('staging read-only verifier requires explicit sandbox approval and refuses invalid origins without network',()=>{
+ const cli=fileURLToPath(new URL('../tools/check-interop-contract-readonly.mjs',import.meta.url));
+ const denied=spawnSync(process.execPath,['--experimental-strip-types',cli],{env:{
+  ...process.env,INTEROP_STAGING_READONLY_ACK:'',INTEROP_STAGING_PROVIDERS:'transport',
+  INTEROP_STAGING_TRANSPORT_URL:'https://transport.sandbox.invalid/',INTEROP_STAGING_TRANSPORT_TOKEN:'synthetic-partner-token-12345678',
+  INTEROP_STAGING_ALLOW_ORIGINS:'https://transport.sandbox.invalid'
+ },encoding:'utf8',timeout:15000});
+ assert.equal(denied.status,1);assert.match(denied.stderr,/BLOCKED Explicit staging read-only approval missing/);
+ const invalid=spawnSync(process.execPath,['--experimental-strip-types',cli],{env:{
+  ...process.env,INTEROP_STAGING_READONLY_ACK:'APPROVED_SANDBOX_ONLY',INTEROP_STAGING_PROVIDERS:'transport',
+  INTEROP_STAGING_START_DATE:'2026-12-12',INTEROP_STAGING_END_DATE:'2026-12-14',
+  INTEROP_STAGING_TRANSPORT_URL:'http://transport.sandbox.invalid/',INTEROP_STAGING_TRANSPORT_TOKEN:'synthetic-partner-token-12345678',
+  INTEROP_STAGING_ALLOW_ORIGINS:'https://transport.sandbox.invalid'
+ },encoding:'utf8',timeout:15000});
+ assert.equal(invalid.status,1);assert.match(invalid.stderr,/BLOCKED transport: HTTPS URL missing or malformed/);
+ assert.doesNotMatch(denied.stderr+invalid.stderr,/synthetic-partner-token-12345678/);
 });
