@@ -39,6 +39,10 @@ test('I5: script mounted safely, production booking flag remains off',()=>{
  assert.match(h,/<script src="\/interop-checkout\.js" defer><\/script>/);
  assert.match(read('app.js'),/JTInteropI5Cart/);
  assert.match(read('integrated.js'),/JTInteropI5Plan/);
- assert.doesNotMatch(source,/fetch\s*\(|\/api\/book|X-Order-Token/);
+ assert.match(source,/root\.fetch\('\/api\/interop\/checkouts\//);
+ assert.match(source,/method:'GET'/);
+ assert.match(source,/cache:'no-store'/);
+ assert.match(source,/X-Interop-Token/);
+ assert.doesNotMatch(source,/method:'POST'|\/api\/book|X-Order-Token/);
  assert.match(readFileSync(new URL('../wrangler.jsonc',import.meta.url),'utf8'),/"BOOKING_ENABLED"\s*:\s*"false"/);
 });
