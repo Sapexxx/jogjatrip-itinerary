@@ -69,7 +69,7 @@ test('provider evidence: transport draft hold body rejects canonical quantity an
   return new Response(JSON.stringify({code:'BAD_JSON',message:'Invalid hold request'}),{status:400,headers:{'Content-Type':'application/json'}});
  });
  await assert.rejects(client.hold({offerId:'signed-transport-offer',quantity:1,customer:{name:'Fixture User',phone:'0800000000'},
-  externalRef:'JT-EXAMPLE-01',consent:true},KEY),e=>e instanceof InteropError&&e.outcomeUnknown===true);
+  externalRef:'JT-EXAMPLE-01',consent:true},KEY),e=>e instanceof InteropError&&e.code==='BAD_JSON'&&e.outcomeUnknown===false);
  assert.equal(seen.length,1);assert.equal(seen[0].body.quantity,1);
 });
 test('provider evidence: unsupported provider status 409 INVALID_OFFER stays UNKNOWN until contract approval',async()=>{
