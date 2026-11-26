@@ -83,6 +83,72 @@ function jtApplyWisataHandoff(){
  page('explore');selectCatalogTab('wisata');
  openDetail({kind:'wisata',id:String(d.id),name:d.name,desc:d.region||'Yogyakarta',price:Number(d.price||0),data:d});
 }
+// Final PR: untrusted partner handoffs only prefill catalog context. Never
+// create a hold, cart item, provider booking, consent or customer record.
+function jtParsePartnerHandoff(search,nowDate){
+ const q=new URLSearchParams(search),from=q.getAll('from');
+ if(from.length!==1||!['jogjastay','jogjatrans'].includes(from[0]))return null;
+ const kind=from[0]==='jogjastay'?'hotel':'transport';
+ const ids=kind==='hotel'?q.getAll('hotelId'):q.getAll('vehicleId');
+ const altIds=kind==='transport'?q.getAll('vehicle'):[];
+ if(kind==='transport'&&ids.length+altIds.length!==1)return {kind,id:null,date:null,endDate:null,roomId:null};
+ const rawId=ids.length===1?ids[0]:altIds[0];
+ const id=ids.length<=1&&/^[A-Za-z0-9_-]{1,64}$/.test(rawId||'')?rawId:null;
+ const room=q.getAll('roomId'),roomId=kind==='hotel'&&room.length===1&&/^[A-Za-z0-9_-]{1,64}$/.test(room[0])?room[0]:null;
+ const dateField=kind==='hotel'?'checkIn':'startDate';
+ const endField=kind==='hotel'?'checkOut':'endDate';
+ const dates=q.getAll(dateField),ends=q.getAll(endField);
+ const valid=raw=>{
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(raw||''))return null;
+  const date=Date.parse(raw+'T00:00:00Z'),start=Date.parse(nowDate+'T00:00:00Z');
+  return Number.isFinite(date)&&new Date(date).toISOString().slice(0,10)===raw&&date>=start&&date<=start+365*86400000?raw:null;
+ };
+ const date=dates.length===1?valid(dates[0]):null;
+ const end=ends.length===1?valid(ends[0]):null;
+ const days=date&&end?Math.round((Date.parse(end)-Date.parse(date))/86400000):null;
+ const endDate=days!==null&&days>=(kind==='hotel'?1:0)&&days<=(kind==='hotel'?30:29)?end:null;
+ return {kind,id,date,endDate,roomId};
+}
+let jtInboundPartner=null;
+function jtInitPartnerHandoff(){
+ const url=new URL(window.location.href),parsed=jtParsePartnerHandoff(url.search,dateStr(new Date()));
+ if(!parsed)return;
+ jtInboundPartner=parsed;
+ for(const key of ['from','hotelId','roomId','checkIn','checkOut','vehicleId','vehicle','startDate','endDate'])url.searchParams.delete(key);
+ window.history.replaceState(window.history.state,'',url.pathname+url.search+url.hash);
+ jtApplyPartnerHandoff();
+}
+function jtApplyPartnerHandoff(){
+ const p=jtInboundPartner;
+ if(!p)return;
+ if(!p.id){jtInboundPartner=null;toast('Tautan provider tidak valid. Pilih layanan dari katalog.');return}
+ if(p.kind==='hotel'){
+  if(state.catalogLoading)return;
+  jtInboundPartner=null;
+  if(state.catalogResults.hotels!=='ok'||state.catalogResults.rooms!=='ok'){toast('Katalog hotel tidak tersedia. Silakan cari kembali.');return}
+  const hotel=state.hotels.find(h=>String(h.hotelId||h.id)===p.id);
+  if(!hotel){toast('Hotel dari tautan tidak ditemukan.');return}
+  const rooms=state.rooms.filter(r=>String(r.hotelId||r.hotel_id)===p.id);
+  if(p.roomId&&!rooms.some(r=>String(r.roomId||r.id)===p.roomId)){toast('Kamar dari tautan tidak tersedia.');return}
+  if($('#detailDialog').open){toast('Tutup dialog yang sedang terbuka, lalu pilih hotel dari katalog.');return}
+  if(p.date)$('#tripDate').value=p.date;
+  page('explore');selectCatalogTab('hotel');
+  openDetail({kind:'hotel',id:p.id,name:hotel.name||hotel.hotelName||'Hotel',desc:hotel.city||'Yogyakarta',price:0,data:hotel});
+  if(p.roomId&&$('#mRoom'))$('#mRoom').value=p.roomId;
+  if(p.date&&$('#mIn'))$('#mIn').value=p.date;
+  if(p.endDate&&$('#mOut'))$('#mOut').value=p.endDate;
+  return;
+ }
+ // Transport identity must be reselected from server-fetched catalog. URL data
+ // is never authoritative evidence of inventory or a selected rental option.
+ jtInboundPartner=null;
+ page('explore');selectCatalogTab('transport');
+ if(p.date&&p.endDate){
+  $('#exploreRentStart').value=p.date;$('#exploreRentEnd').value=p.endDate;
+  invalidateExploreRental();loadExploreVehicles();
+ }
+ toast('Tautan JogjaTrans diterima. Periksa model '+p.id+' dan stok di katalog terbaru sebelum memilih.');
+}
 function jtReadLocation({initial=false}={}){
  const raw=window.location.hash,route=jtParseRoute(raw);
  // The skip link is an in-page accessibility anchor, not a route.
@@ -109,6 +175,7 @@ document.addEventListener?.('DOMContentLoaded',()=>{
  window.addEventListener('hashchange',()=>jtReadLocation());
  jtReadLocation({initial:true});
  jtInitWisataHandoff();
+ jtInitPartnerHandoff();
 });
 $$('[data-tab]').forEach(x=>x.onclick=()=>selectCatalogTab(x.dataset.tab));
 const region=()=>$('#region').value, tripDate=()=>$('#tripDate').value, guests=()=>Number($('#guests').value), nights=()=>Number($('#nights').value);
@@ -184,7 +251,7 @@ async function loadCatalog(){
  const rental=loadExploreVehicles();
  await Promise.allSettled([...jobs,rental]);
  if(seq!==state.catalogSeq)return;
- state.catalogLoading=false;renderCatalog();if(typeof renderPackages==='function')renderPackages();jtApplyWisataHandoff();
+ state.catalogLoading=false;renderCatalog();if(typeof renderPackages==='function')renderPackages();jtApplyWisataHandoff();jtApplyPartnerHandoff();
 }
 function renderCatalog(){
  const rental=state.tab==='transport',showVehicles=rental||state.tab==='all';
@@ -250,3 +317,8 @@ $('#bookBtn').onclick=async()=>{if(!state.quote)return;if(state.cart.some(c=>!jt
 function renderOrders(){$('#orderList').innerHTML=state.orders.length?state.orders.map(o=>`<div class="ordercard"><h3>${escapeHTML(o.id)}</h3><p>Token disimpan di browser ini. Pilih untuk memeriksa status dan sinkronkan jika ada perubahan provider.</p><button class="dark" data-order="${escapeHTML(o.id)}">Lihat rincian <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/icons.svg#arrow"></use></svg></button></div>`).join(''):'<div class="empty"><strong>Belum ada pesanan di browser ini</strong>Setelah checkout, data pesanan muncul di sini.</div>';$$('[data-order]').forEach(x=>x.onclick=()=>{const o=state.orders.find(n=>n.id===x.dataset.order);$('#lookupId').value=o.id;$('#lookupToken').value=o.token;lookup()})}
 async function lookup(){const id=$('#lookupId').value.trim(),token=$('#lookupToken').value.trim();if(!id||!token){toast('ID dan token akses harus diisi');return}try{const o=await request('/api/orders/'+encodeURIComponent(id),{headers:{'X-Order-Token':token}});$('#lookupResult').innerHTML=`<div class="ordercard"><h3>${escapeHTML(o.id)} <span class="status ${escapeHTML(o.status)}">${escapeHTML(o.status)}</span></h3><p>${escapeHTML(o.customer.name)} · ${escapeHTML(o.createdAt)}</p>${o.items.map((x,i)=>`<div class="price-row"><div><strong>${escapeHTML(x.item.type.toUpperCase())}</strong><br><small>${escapeHTML(x.bookingId||x.error||'Belum diproses')}<br><small>${escapeHTML(jtCartScheduleLabel(x.item))}</small>${x.syncError?'<br><em class="sync-error">Gagal verifikasi: '+escapeHTML(x.syncError)+'</em>':''}</small></div><span class="status ${escapeHTML(x.status)}">${escapeHTML(x.status)}</span></div>`).join('')}<div class="price-row total">Total terkonfirmasi <strong>${money(o.total)}</strong></div></div>`}catch(e){toast(e.message)}}
 $('#lookupBtn').onclick=lookup;$('#findBtn').onclick=loadCatalog;state.cart=JSON.parse(sessionStorage.getItem('jt_cart')||'[]');renderCatalog();saveCart();loadCatalog();
+
+// I5: expose selection-only data to isolated, non-mutating Contract 0.2 preview.
+window.JTInteropI5Cart=()=>({items:state.cart.map(c=>({...c.item})),quote:state.quote?{total:state.quote.total,items:state.quote.items,available:state.quote.available}:null});
+const jtI5RenderCart=renderCart;
+renderCart=function(){const value=jtI5RenderCart.apply(this,arguments);window.JTInteropI5Mounted?.refresh('cart');return value};

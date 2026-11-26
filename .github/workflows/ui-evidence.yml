@@ -1,7 +1,7 @@
 name: Itinerary Jogja UI evidence
 on:
   push:
-    branches: [feat/itinerary-jogja-ui, fix/i0-wisata-handoff, feat/interop-client-0.2]
+    branches: [feat/itinerary-jogja-ui, fix/i0-wisata-handoff, feat/interop-client-0.2, feat/interop-client-i5, feat/interop-i45-hardening, feat/interop-i45-closure, feat/interop-provider-contract-gate, feat/interop-final-itinerary-alignment, integration/final-interop-0.2-reviewed]
   pull_request:
     branches: [cloudflare-deploy]
     paths:
