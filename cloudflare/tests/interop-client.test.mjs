@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createInteropClient,InteropError} from '../src/interop.ts';
+import {contractReservationStatus,contractPaymentStatus,contractState} from '../src/core.ts';
 import {mockProvider,TOKEN,OTHER,KEY,query} from './fixtures/interop-provider.mjs';
 const make=(mock,overrides={})=>createInteropClient({provider:'transport',baseUrl:'https://fixture.invalid',token:TOKEN,fetcher:mock.fetcher,...overrides});
 const input=(offerId,extra={})=>({offerId,quantity:1,customer:{name:'Fixture User',phone:'0800000000'},externalRef:'JT-FIXTURE-01',consent:true,...extra});
@@ -119,4 +120,13 @@ test('final PR: Contract 0.2 provider rejection codes are definite only for matc
  await assert.rejects(client(503,'UPSTREAM_BUSY').hold(input('offer-fixture'),KEY),err(503,'UPSTREAM_HTTP_ERROR',true));
  await assert.rejects(client(409,'IDEMPOTENCY_CONFLICT').hold(input('offer-fixture'),KEY),err(409,'IDEMPOTENCY_CONFLICT',true));
  await assert.rejects(client(503,'INTEROP_NOT_CONFIGURED').capabilities(),err(503,'INTEROP_NOT_CONFIGURED',false));
+});
+
+test('final PR: reservation status cannot be inferred from provider payment state',()=>{
+ assert.deepEqual(contractState('reserved','unpaid'),{reservationState:'reserved',paymentState:'unpaid'});
+ assert.deepEqual(contractState('awaiting_payment','paid'),{reservationState:'awaiting_payment',paymentState:'paid'});
+ assert.deepEqual(contractState('reserved',undefined),{reservationState:'reserved',paymentState:'UNKNOWN'});
+ assert.equal(contractReservationStatus('PAID'),'UNKNOWN');
+ assert.equal(contractPaymentStatus('CONFIRMED'),'UNKNOWN');
+ assert.deepEqual(contractState('cancelled','refunded'),{reservationState:'cancelled',paymentState:'refunded'});
 });
