@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "contract": "0.2.0",
+  "capturedOn": "2026-11-26",
+  "source": "PR FINAL YANG HARUS KALIAN KERJAKAN (1).zip / PR/PR_ITINERARY.md",
+  "status": "BLOCKED",
+  "providerEvidence": {
+    "hotel": {
+      "repo": "FaridAzis/jogjastay-hotel-service",
+      "mainSha": "9b5cd38db1010265225abf63ca19da46fc89835d",
+      "stagingContractRun": "https://github.com/FaridAzis/jogjatrans-service/actions/runs/45810713955",
+      "contractTestsReported": "26/26",
+      "liveReadOnlyValidatedByThisPR": false,
+      "durableStorageValidatedByThisPR": false
+    },
+    "transport": {
+      "repo": "FaridAzis/jogjatrans-service",
+      "mainSha": "6018ac4e092bb16cd91363bf3a19b6a43a5efff9",
+      "stagingContractRun": "https://github.com/FaridAzis/jogjatrans-service/actions/runs/45810713955",
+      "contractTestsReported": "26/26",
+      "liveReadOnlyValidatedByThisPR": false,
+      "durableStorageValidatedByThisPR": false
+    },
+    "wisata": {
+      "repo": "ANDI-BACHDAR-DD/Jogja_wista",
+      "mainSha": "8ce4d8d83a2f7d31b8d8b7987607610e9a073315",
+      "unitAndBrowserRun": "https://github.com/ANDI-BACHDAR-DD/Jogja_wista/actions/runs/45840584409",
+      "unitBrowserPass": "104 API + 29 browser",
+      "stagingContractRun": null,
+      "liveReadOnlyValidatedByThisPR": false,
+      "durableStorageValidatedByThisPR": false,
+      "transactionAtomicityProven": false,
+      "remoteFallbackSafetyProven": false
+    }
+  },
+  "required": {
+    "approvedContractVersionAndSha": false,
+    "approvedHandoffProducerExamples": false,
+    "authenticatedStagingAllThree": false,
+    "officialContractCheckerAllThree": false,
+    "wisataRemoteTransactionalW2": false,
+    "e8AndE9RealStagingPassed": false,
+    "paymentAndOperatorPolicyReviewed": false
+  },
+  "notes": [
+    "Values reflect only inspected GitHub source and test evidence, not secrets or an authenticated live provider query.",
+    "A source/test report does not imply durable storage or real multi-provider reservation.",
+    "This manifest is an audit snapshot, not a trusted runtime authorization source."
+  ]
+}

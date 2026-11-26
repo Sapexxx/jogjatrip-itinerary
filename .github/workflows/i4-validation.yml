@@ -1,7 +1,7 @@
 name: I4 Hold Saga validation
 on:
   push:
-    branches: [feat/interop-saga-i4, feat/interop-client-i5, feat/interop-i45-hardening, feat/interop-i45-closure, feat/interop-provider-contract-gate, feat/interop-final-itinerary-alignment, integration/final-interop-0.2-reviewed, integration/main-cloudflare-conflict-resolved]
+    branches: [feat/interop-saga-i4, feat/interop-client-i5, feat/interop-i45-hardening, feat/interop-i45-closure, feat/interop-provider-contract-gate, feat/interop-final-itinerary-alignment, integration/final-interop-0.2-reviewed, integration/main-cloudflare-conflict-resolved, feat/final-i6-staging-evidence-gate]
   workflow_dispatch:
 permissions:
   contents: read
