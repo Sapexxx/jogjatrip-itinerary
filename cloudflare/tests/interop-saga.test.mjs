@@ -245,7 +245,7 @@ test('I6 mock rehearsal: UNKNOWN at third HOLD keeps two earlier holds and forbi
  assert.equal(hotel.calls.hold,1);assert.equal(wisata.calls.hold,1);assert.equal(transport.calls.hold,1);
  assert.equal(hotel.calls.release+wisata.calls.release+transport.calls.release,0);
  assert.equal(hotel.calls.confirm+wisata.calls.confirm+transport.calls.confirm,0);
- assert.equal((await s.confirm(f.id,f.token)).status,'BLOCKED');
+ await assert.rejects(s.confirm(f.id,f.token),e=>e?.code==='ORDER_LOCKED');
  assert.equal((await operations(f)).filter(o=>o.state==='UNKNOWN').length,1);
 });
 test('I6 mock rehearsal: third CONFIRM definite rejection produces PARTIAL without automatic compensation',async t=>{
