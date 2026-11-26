@@ -156,8 +156,13 @@ test('I3 D1: integration with I1 fixture lost response recovers exact same key a
  await j.recordOutcome(recovered,0,'HOLD',0,{state:'SUCCEEDED',result:replay});await j.releaseLock(recovered);
  assert.equal((await j.readJournal(checkout.orderId,TOKEN_A)).operations[0].state,'SUCCEEDED');
 });
-test('I3: journal module isolated, no production migration or wiring',()=>{
- for(const f of ['index.ts','orders.ts','provider.ts','plans.ts','packages.ts','db.ts'])assert.doesNotMatch(readFileSync(new URL('../src/'+f,import.meta.url),'utf8'),/from\s+['"][^'"]*interop-journal\.ts/);
+test('I3: public routing may read authenticated journal but cannot invoke I4 mutation',()=>{
+ for(const f of ['orders.ts','provider.ts','plans.ts','packages.ts','db.ts'])
+  assert.doesNotMatch(readFileSync(new URL('../src/'+f,import.meta.url),'utf8'),/from\s+['"][^'"]*interop-(journal|saga)\.ts/);
+ const worker=readFileSync(new URL('../src/index.ts',import.meta.url),'utf8');
+ assert.match(worker,/createInteropReadGateway/);
+ assert.match(worker,/method==='GET'/);
+ assert.doesNotMatch(worker,/createHoldSaga|\.hold\(|\.confirm\(|\.release\(|reserveCheckout\(|beginOperation\(/);
  assert.match(readFileSync(new URL('../wrangler.jsonc',import.meta.url),'utf8'),/"BOOKING_ENABLED"\s*:\s*"false"/);
 });
 

@@ -109,6 +109,13 @@ export function createInteropJournal(db:D1Binding,options:{now?:()=>number;lease
   if(!changed(result))return replay(row);
   demand(row.order_id===id,'CHECKOUT_WRITE_UNVERIFIED',503);return {created:true,checkout:rowCheckout(row)};
  }
+ /** Find an already-persisted checkout after a lost HTTP response. Never creates or retries a mutation. */
+ async function lookupCheckoutByKey(key:string,token:string):Promise<CheckoutRecord>{
+  demand(typeof key==='string'&&keyPattern.test(key)&&typeof token==='string'&&accessPattern.test(token),'NOT_FOUND',404);
+  const row=await db.prepare('SELECT * FROM jt_checkout_requests WHERE key_hash=?').bind(await sha256(key)).first();
+  demand(row&&row.access_hash===await sha256(token),'NOT_FOUND',404);
+  return rowCheckout(row);
+ }
  async function lockRow(id:string){return db.prepare('SELECT * FROM jt_order_locks WHERE order_id=?').bind(id).first()}
  async function claimLock(id:string,token:string):Promise<LockProof>{
   await auth(id,token);
@@ -228,5 +235,5 @@ export function createInteropJournal(db:D1Binding,options:{now?:()=>number;lease
   for(let i=0;i<checkout.offers.length;i++)for(const op of ['HOLD','CONFIRM','RELEASE'] as const){const row=await readOp(id,i,op);if(row)operations.push(rowOperation(row))}
   return {checkout,operations};
  }
- return Object.freeze({reserveCheckout,loadCheckout:auth,claimLock,renewLock,recoverExpiredLock,releaseLock,beginOperation,getOperationRequest,recordOutcome,readJournal});
+ return Object.freeze({reserveCheckout,lookupCheckoutByKey,loadCheckout:auth,claimLock,renewLock,recoverExpiredLock,releaseLock,beginOperation,getOperationRequest,recordOutcome,readJournal});
 }

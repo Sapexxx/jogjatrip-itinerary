@@ -101,7 +101,38 @@ function mount(){
   const detail=doc.createElement('p');detail.setAttribute('role','status');detail.setAttribute('aria-live','polite');
   const action=doc.createElement('button');action.type='button';action.className='outlinewide';action.textContent='Siapkan referensi checkout lokal';
   const note=doc.createElement('small');note.textContent='Tahap I5: hanya menyiapkan identitas transaksi. Tidak membuat booking atau menghubungi provider. Integrasi transaksi belum diaktifkan.';
-  el.append(heading,detail,action,note);anchor.parentNode.insertBefore(el,anchor);panels.set(view.id,{view,detail,action});
+  // Read-only server journal lookup; credentials are typed, never persisted.
+  const statusForm=doc.createElement('form');statusForm.setAttribute('aria-label','Periksa status checkout Contract 0.2');
+  const idLabel=doc.createElement('label');idLabel.textContent='ID checkout Contract 0.2';
+  const orderInput=doc.createElement('input');orderInput.type='text';orderInput.name='orderId';orderInput.placeholder='JT-...';orderInput.autocomplete='off';idLabel.append(orderInput);
+  const tokenLabel=doc.createElement('label');tokenLabel.textContent='Token akses checkout (rahasia)';
+  const tokenInput=doc.createElement('input');tokenInput.type='password';tokenInput.name='checkoutToken';tokenInput.autocomplete='off';tokenInput.spellcheck=false;tokenLabel.append(tokenInput);
+  const check=doc.createElement('button');check.type='submit';check.className='outlinewide';check.textContent='Periksa status tersimpan (baca saja)';
+  const statusOut=doc.createElement('p');statusOut.setAttribute('role','status');statusOut.setAttribute('aria-live','polite');
+  const statusNote=doc.createElement('small');statusNote.textContent='Token hanya dipakai untuk permintaan ini. Tidak disimpan atau dimasukkan ke URL. Endpoint aktif hanya jika Contract 0.2 tersedia di server.';
+  statusForm.append(idLabel,tokenLabel,check,statusOut,statusNote);
+  statusForm.addEventListener('submit',async e=>{
+   e.preventDefault();
+   const id=orderInput.value.trim(),token=tokenInput.value.trim();
+   if(!/^JT-[a-f0-9]{32}$/.test(id)||!/^[a-f0-9]{64}$/.test(token)){
+    statusOut.textContent='Format ID atau token tidak valid.';return;
+   }
+   check.disabled=true;
+   try{
+    const response=await root.fetch('/api/interop/checkouts/'+encodeURIComponent(id),{
+     method:'GET',cache:'no-store',credentials:'same-origin',referrerPolicy:'no-referrer',
+     headers:{'X-Interop-Token':token,'Accept':'application/json'}
+    });
+    if(!response.ok)throw Error('Status belum tersedia atau token tidak sesuai.');
+    const data=await response.json();
+    if(data.verifiedBy!=='D1_JOURNAL'||data.orderId!==id||!STATES.has(data.status)&&data.status!=='NOT_STARTED')
+     throw Error('Respons status tidak dapat diverifikasi.');
+    const labels=Array.isArray(data.items)?data.items.map(x=>String(x.provider)+': '+String(x.state)).join(' · '):'';
+    statusOut.textContent='D1 journal: '+data.status+'. '+labels+'. Tidak membuktikan pembayaran atau transaksi atomik.';
+   }catch(_){statusOut.textContent='Status checkout tidak tersedia atau belum dapat diverifikasi. Jangan mengirim ulang transaksi.'}
+   finally{tokenInput.value='';check.disabled=false}
+  });
+  el.append(heading,detail,action,note,statusForm);anchor.parentNode.insertBefore(el,anchor);panels.set(view.id,{view,detail,action});
   action.addEventListener('click',async()=>{
    const input=view.get();if(!input)return;
    action.disabled=true;
