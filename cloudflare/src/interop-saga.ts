@@ -16,14 +16,12 @@ export type SagaStatus='AWAITING_CONFIRMATION'|'CONFIRMED'|'COMPENSATED'|'PARTIA
 export interface SagaResult {
  orderId:string;status:SagaStatus;reason:string;completed:number;total:number;
 }
+/** Client I1 classifies documented HTTP-status/code pairs; never reclassify
+ * unknown remote mutations or idempotency conflicts in the saga. */
 function verifiedReject(e:unknown):e is InteropError {
- return e instanceof InteropError&&!e.outcomeUnknown&&(
-  e.status===401||
-  (e.status===400&&['CONSENT_REQUIRED','VALIDATION_ERROR','INVALID_REQUEST','INVALID_IDEMPOTENCY_KEY','INVALID_EXTERNAL_REF'].includes(e.code))||
-  (e.status===409&&['NOT_AVAILABLE','HOLD_EXPIRED','HOLD_RELEASED'].includes(e.code))||
-  (e.status===422&&e.code==='INVALID_OFFER')
- );
+ return e instanceof InteropError&&!e.outcomeUnknown;
 }
+
 function codeOf(e:unknown){return e instanceof InteropError?e.code:'UPSTREAM_HTTP_ERROR'}
 function httpOf(e:unknown){return e instanceof InteropError?e.status:502}
 export function createHoldSaga(journal:Journal,clients:Clients,options:{now?:()=>number;minTtlMs?:number;authorizeRecovery?:(orderId:string)=>boolean|Promise<boolean>;authorizeHold?:(orderId:string)=>boolean|Promise<boolean>;authorizeConfirm?:(orderId:string)=>boolean|Promise<boolean>}={}){
