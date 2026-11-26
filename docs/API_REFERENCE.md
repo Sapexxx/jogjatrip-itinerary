@@ -22,6 +22,8 @@ Referensi ini disusun dari route yang tersedia dalam **Go V5.3** dan adaptasi **
 | GET | `/api/catalog/hotels` | Katalog hotel | Tidak |
 | GET | `/api/catalog/rooms` | Katalog tipe kamar | Tidak |
 | GET | `/api/catalog/destinations` | Katalog destinasi | Tidak |
+| GET | `/api/catalog/vehicles?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD` | Katalog rental live JogjaTrans (simulasi) | Tidak |
+| GET | `/api/semantic` | Kamus CRS JogjaTrip | Tidak |
 | GET | `/api/recommendations?hotelId=H01` | Wisata berdasarkan wilayah hotel | Tidak |
 | POST | `/api/quote` | Perkiraan harga/ketersediaan satu/lebih layanan | Tidak |
 | POST | `/api/book` | Checkout layanan mandiri | Checkout harus diaktifkan dan kredensial valid |
@@ -133,7 +135,7 @@ Aktivitas manual (*custom*) hanya masuk rencana. Aktivitas terkait provider meny
 |---|---|---|
 | JogjaStay Hotel | https://jogjastay-hotel-service.jogjawisata.workers.dev | `GET /api/v1/hotels`, `GET /api/v1/rooms`, pengecekan availability, `POST /api/v1/hotel-bookings` |
 | Wisata Jogja | https://wisata-jogja-ten.vercel.app | `GET /api/v1/destinations`, pengecekan availability, `POST /api/v1/partner/bookings` jika benar-benar didukung dan diotorisasi |
-| Transportasi | Belum tersedia | Belum ada endpoint yang boleh diklaim |
+| JogjaTrans Rental | https://jogjatrans-service.jogjawisata.workers.dev | `GET /api/v1/rentals/vehicles`, `POST /api/v1/rentals/bookings`, `GET /api/v1/rentals/bookings/{id}` (token privat) |
 
 Detail payload, metode, tier, status mentah, dan autentikasi mengikuti API provider aktual; **jangan** menyimpulkan kesiapan pembayaran dari adanya endpoint booking.
 
@@ -162,3 +164,11 @@ Pengayaan nama/foto di `GET /api/orders/{id}/details` bergantung katalog live; t
 - Contoh ini menggambarkan kontrak yang diimplementasikan, bukan jaminan kompatibilitas produksi dengan revisi API provider di masa mendatang.
 
 [Kembali ke README utama](../README.md) · [Arsitektur](ARCHITECTURE.md).
+
+## 7. Transportasi Rental (PR-4)
+
+Katalog: `GET /api/catalog/vehicles?startDate=2026-12-01&endDate=2026-12-02&withDriver=false&type=all&category=all`. Response memiliki `provider: transport`, `items`, `simulation: true`; harga adalah simulasi. Rentang sewa maksimal 30 hari.
+
+Contoh item: `{"type":"transport","vehicleId":"BRIO","startDate":"2026-12-01","endDate":"2026-12-02","withDriver":false}`.
+
+Booking demo membutuhkan `customer.name`, `customer.email`, dan `customer.phone` (9–20 karakter). Aplikasi menjaga `BOOKING_ENABLED=false` hingga demo terkontrol. `recorded` dan `contacted` dipetakan ke PENDING; token booking JogjaTrans tersimpan di D1 dan dibuang dari semua JSON publik. Pembatalan rental tidak otomatis. Pengujian mock bukan bukti API live.

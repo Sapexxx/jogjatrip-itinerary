@@ -1,0 +1,13 @@
+{
+  "id":"jogja-klasik", "name":"Jelajah Kota & Warisan Jawa", "description":"Menginap dekat Malioboro dan berkunjung ke Keraton Yogyakarta.", "region":"Kota Yogyakarta", "nights":2,
+  "components":[
+    {"id":"stay","kind":"hotel","required":true,"dayOffset":0,"hotelId":"H01","roomId":"R0101","nights":2},
+    {"id":"keraton","kind":"wisata","required":true,"dayOffset":1,"destinationId":1,"tier":"base","qty":0}
+  ],
+  "addOns":[
+    {"id":"taman-sari","name":"Tiket Taman Sari tambahan","kind":"extra_component","dependsOn":"keraton","maxQty":1,"priceSource":"provider_live","component":{"id":"taman-sari","kind":"wisata","required":false,"dayOffset":1,"destinationId":2,"tier":"base","qty":0}},
+    {"id":"rental-mobil","name":"Sewa mobil selama 2 hari (estimasi simulasi)","kind":"extra_component","maxQty":1,"priceSource":"provider_live_simulated","component":{"kind":"transport","dayOffset":0,"vehicleId":"BRIO","days":2,"withDriver":false}},
+    {"id":"agenda-otomatis","name":"Penyusunan agenda otomatis","kind":"native","maxQty":1,"priceSource":"fixed_idr","fixedIdr":0}
+  ],
+  "bundleDiscount":{"type":"percent","value":5},"active":true
+}

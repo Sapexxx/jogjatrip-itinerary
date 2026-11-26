@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "jogjatrip-itinerary",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-20",
+  "assets": {
+    "directory": "./web",
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/api/*"
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "jogjatrip-db",
+      "database_id": "7fa5e947-232d-4cb1-b856-4b194fe16a5b",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "HOTEL_API_URL": "https://jogjastay-hotel-service.jogjawisata.workers.dev",
+    "WISATA_API_URL": "https://wisata-jogja-ten.vercel.app",
+    "TRANSPORT_API_URL": "https://jogjatrans-service.jogjawisata.workers.dev",
+    "BOOKING_ENABLED": "false"
+  }
+}

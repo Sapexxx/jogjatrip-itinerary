@@ -1,12 +1,12 @@
-# Panduan Penggunaan JogjaTrip
+# Panduan Penggunaan Itinerary Jogja
 
 Panduan ini menjelaskan **apa yang dilakukan pengguna** dan **apa arti status yang ditampilkan** pada aplikasi. Tangkapan layar dan data konkret bergantung pada katalog provider yang berhasil diakses saat aplikasi dijalankan.
 
 ## 1. Mulai perjalanan
 
-Buka JogjaTrip melalui server lokal atau URL Cloudflare yang **telah terverifikasi aktif**. Pada halaman eksplorasi, pengguna dapat memilih wilayah DIY, lama perjalanan, tanggal, jumlah wisatawan, dan preferensi anggaran. Anggaran adalah batas perencanaan, bukan jaminan seluruh layanan sesuai dengan harga tersebut.
+Buka Itinerary Jogja melalui server lokal atau URL Cloudflare yang **telah terverifikasi aktif**. Pada halaman eksplorasi, pengguna dapat memilih wilayah DIY, lama perjalanan, tanggal, jumlah wisatawan, dan preferensi anggaran. Anggaran adalah batas perencanaan, bukan jaminan seluruh layanan sesuai dengan harga tersebut.
 
-Pilihan yang didukung: **Hotel saja**, **Wisata saja**, atau **gabungan Hotel + Wisata**. Transportasi ditampilkan sebagai fitur belum tersedia; jangan memasukkan biaya/booking transportasi yang belum berasal dari provider resmi.
+Pilihan yang didukung pada frontend Cloudflare: Hotel, Wisata, Transportasi (rental JogjaTrans), atau kombinasinya. Tarif dan stok rental adalah simulasi akademik. Checkout produksi tetap dinonaktifkan. Versi Go lama tidak memiliki dukungan rental.
 
 ## 2. Memilih penginapan
 
@@ -26,7 +26,7 @@ Harga hotel umumnya dihitung untuk periode menginap, bukan jumlah tiket wisata.
 4. Simpan sebagai agenda atau komponen Pilihan Saya.
 5. Lihat quote harga/kuota ketika tersedia.
 
-**Catatan penting:** jam kunjungan yang dipilih di JogjaTrip adalah *rencana pengguna*. API Wisata yang digunakan belum memberikan jaminan slot jam tertentu dalam setiap respons booking. Jika informasi jam operasional tidak tersedia dari provider, sistem tidak boleh mengarang jam buka.
+**Catatan penting:** jam kunjungan yang dipilih di Itinerary Jogja adalah *rencana pengguna*. API Wisata yang digunakan belum memberikan jaminan slot jam tertentu dalam setiap respons booking. Jika informasi jam operasional tidak tersedia dari provider, sistem tidak boleh mengarang jam buka.
 
 ## 4. Menyusun itinerary mandiri
 
@@ -44,9 +44,9 @@ Mengubah agenda setelah memiliki booking provider bukan perubahan reservasi resm
 
 ## 5. Memahami paket bundling
 
-JogjaTrip menyediakan contoh paket *curated* berbasis template dan inspirasi perjalanan berdasarkan durasi/tema/wilayah. Template curated yang tersimpan pada repository adalah **Jelajah Kota & Warisan Jawa** dan **Jogja Heritage Plus**, masing-masing menggunakan referensi layanan provider.
+Itinerary Jogja menyediakan contoh paket *curated* berbasis template dan inspirasi perjalanan berdasarkan durasi/tema/wilayah. Template curated yang tersimpan pada repository adalah **Jelajah Kota & Warisan Jawa** dan **Jogja Heritage Plus**, masing-masing menggunakan referensi layanan provider.
 
-Paket bukan kepastian bahwa setiap komponen tersedia pada tanggal tertentu. Nilai diskon adalah aturan JogjaTrip; harga dasar Hotel dan Wisata tetap harus diverifikasi dari API. Pengguna dapat meninjau komponen, waktu, dan add-on yang didukung sebelum quote.
+Paket bukan kepastian bahwa setiap komponen tersedia pada tanggal tertentu. Nilai diskon adalah aturan Itinerary Jogja; harga dasar Hotel dan Wisata tetap harus diverifikasi dari API. Pengguna dapat meninjau komponen, waktu, dan add-on yang didukung sebelum quote.
 
 Beberapa rekomendasi itinerary harian dapat berisi lebih dari satu kunjungan; **dua contoh template curated bukan representasi seluruh kemungkinan paket perjalanan**.
 
@@ -64,14 +64,14 @@ Halaman **Pesanan Saya** digunakan untuk melihat:
 
 | Informasi | Keterangan |
 |---|---|
-| Kode pesanan JogjaTrip | Identitas gabungan di sistem JogjaTrip |
+| Kode pesanan Itinerary Jogja | Identitas gabungan di sistem Itinerary Jogja |
 | Nama hotel / destinasi | Hasil katalog jika dapat diverifikasi; jangan diisi fiktif |
 | Produk / jumlah | Kamar, tamu, tier tiket, atau jumlah tiket |
 | Tanggal | Check-in/out atau tanggal kunjungan |
 | Jam | Preferensi perjalanan pengguna |
 | Harga | Nilai historis yang tersimpan pada transaksi, bukan otomatis harga katalog hari ini |
 | Kode booking provider | Referensi dari layanan Hotel atau Wisata |
-| Status dan sinkronisasi | Status mentah provider, normalisasi JogjaTrip, waktu verifikasi, error jika tidak berhasil |
+| Status dan sinkronisasi | Status mentah provider, normalisasi Itinerary Jogja, waktu verifikasi, error jika tidak berhasil |
 
 Bila provider tidak dapat diakses, jangan langsung menganggap pesanan dibatalkan ataupun berhasil. Status terakhir dan pesan kegagalan sinkronisasi perlu dibaca bersama-sama.
 
@@ -101,6 +101,14 @@ Pilih layanan → Simpan itinerary (draft)
              Sinkronisasi status reservasi
 ```
 
-Alur ini menunjukkan bahwa interoperabilitas bukan sekadar berpindah halaman: JogjaTrip berkomunikasi dengan API partner untuk membaca data dan, pada kondisi terotorisasi, membuat referensi reservasi.
+Alur ini menunjukkan bahwa interoperabilitas bukan sekadar berpindah halaman: Itinerary Jogja berkomunikasi dengan API partner untuk membaca data dan, pada kondisi terotorisasi, membuat referensi reservasi.
 
 [Kembali ke halaman utama](../README.md) · [Status & batasan](PROJECT_STATUS.md).
+
+## Alur baru (feature branch redesign)
+
+Gunakan Beranda untuk mencari tiga layanan, Paket untuk inspirasi berbasis katalog, Pilihan Saya untuk keranjang, Itinerary untuk agenda harian, dan Pesanan untuk riwayat. Pilih hari atau Semua hari; tautan `#/itinerary/hari-2` membuka tampilan lokal dan tidak membagikan isi rencana. Back/Forward browser berfungsi. Pada mobile, tekan Menu. Dalam Itinerary, isi jam sendiri, pindahkan hari atau gunakan Naik/Turun tanpa drag, dan isi waktu tempuh hanya jika diketahui. Check-out dan pengembalian adalah penanda, bukan reservasi tambahan. Estimasi per hari berasal dari katalog; harga yang tidak diketahui diberi keterangan dan booking lama tidak dihitung ulang. Periksa konflik, simpan, lalu cek harga/stok. Tiket perjalanan dapat dicetak melalui dialog browser, bukan tiket konfirmasi provider. Token akses tidak boleh dibagikan. Perubahan tampilan ini masih menunggu review/deployment.
+
+## Handoff dari Wisata Jogja (prasyarat PR-I5)
+
+Tautan `/?from=wisata&destinationId=101&visitDate=2026-12-10` membuka detail destinasi setelah katalog sukses. ID harus 1–15 digit positif; tanggal kalender dari hari ini sampai 365 hari berikutnya, atau tanggal bawaan bila tidak valid. Pengguna masih harus memilih jam dan menekan Tambahkan ke itinerary. Tidak menambah cart secara otomatis atau melakukan reservasi. Parameter handoff dibersihkan, parameter lainnya dipertahankan. Jika destinasi tidak ditemukan atau katalog gagal, tampilkan pesan. Tautan dari provider lain belum didukung.

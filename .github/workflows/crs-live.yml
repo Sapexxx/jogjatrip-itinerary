@@ -1,0 +1,39 @@
+name: PR-I1 CRS live compatibility
+
+on:
+  pull_request:
+    branches: [cloudflare-deploy]
+    paths:
+      - 'cloudflare/crs-vocabulary.json'
+      - 'cloudflare/tools/check-transport-live.mjs'
+      - '.github/workflows/crs-live.yml'
+  push:
+    branches: [cloudflare-deploy]
+    paths:
+      - 'cloudflare/crs-vocabulary.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  crs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify live JogjaTrans vocabulary (pre-merge gate)
+        run: node cloudflare/tools/check-transport-live.mjs --provider-only
+      - name: Verify deployed JogjaTrip and all catalogs (after deployment)
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/cloudflare-deploy'
+        shell: bash
+        run: |
+          for i in {1..8}; do
+            if node cloudflare/tools/check-transport-live.mjs; then exit 0; fi
+            echo "Attempt $i: deployment or API not yet verified."
+            if [ "$i" -lt 8 ]; then sleep 20; fi
+          done
+          exit 1

@@ -154,3 +154,7 @@ Penyimpanan rahasia: env lokal yang tidak masuk Git dan **Workers Secrets** untu
 Jangan menghapus referensi ID booking provider; jangan mengubah status `DECLINED` menjadi berhasil; jangan membuat jam provider palsu; jangan mencampur pembayaran simulasi dengan pembayaran riil. Lakukan perubahan kecil dan mudah diaudit, lalu catat perbedaan kode, tes, commit, deploy, dan validasi browser.
 
 [Kembali ke README utama](../README.md) · [Status proyek](PROJECT_STATUS.md).
+
+## Redesign Itinerary Jogja (Cloudflare)
+
+Target `cloudflare/web/`, branch `feat/itinerary-jogja-ui`. `style.css` mengimpor `base.css`, `components.css`, `pages/explore.css`, `pages/itinerary.css`, `pages/orders.css`, `layout.css`, dan `accessibility.css`; `tokens.css` dimuat sebelum semuanya. Sprite `icons.svg` lokal. Tidak ada bundler atau framework runtime. Pertahankan `data-page`, ID dan API pada `docs/ui-contract.md`. Jalankan `cd cloudflare && npm test`, `npm run typecheck`, `npx wrangler deploy --dry-run`, `python3 ../scripts/check-contrast.py` (atau dari root `python3 scripts/check-contrast.py`), serta `node tools/ui-evidence.mjs` dari direktori kerja dengan Chrome tersedia. Workflow UI memiliki job Lighthouse mobile pada lima route, menginstal CLI versi 12.8.2 hanya di runner, menyimpan JSON dan gagal bila accessibility/best practices <95 atau CLS >=0.1. Fixture server tidak mengakses provider produksi. Jangan merge/deploy tanpa seluruh check sukses dan persetujuan pemilik.

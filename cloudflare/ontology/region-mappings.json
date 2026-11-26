@@ -1,0 +1,10 @@
+{
+  "description":"Canonical region mappings; backend Go uses equivalent explicit rules. No OWL reasoner is run.",
+  "regions":[
+    {"canonical":"Kota Yogyakarta","hotel":["Kota Yogyakarta"],"wisata":["kota-yogyakarta"]},
+    {"canonical":"Sleman","hotel":["Sleman"],"wisata":["kabupaten-sleman"]},
+    {"canonical":"Bantul","hotel":["Bantul"],"wisata":["kabupaten-bantul"]},
+    {"canonical":"Gunungkidul","hotel":["Gunungkidul"],"wisata":["kabupaten-gunungkidul"]},
+    {"canonical":"Kulon Progo","hotel":["Kulon Progo"],"wisata":["kabupaten-kulon-progo"]}
+  ]
+}
