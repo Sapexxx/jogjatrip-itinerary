@@ -42,6 +42,20 @@ export function regionFromFields(...values){
   return regionById.get([...ids][0])?.label || '';
 }
 export const semanticVocabulary = vocabulary;
+/** Contract 0.2 distinguishes provider reservation from financial state.
+ * This is intentionally separate from legacy status()/recompute() and never
+ * infers payment from a confirmed or reserved booking. */
+export function contractReservationStatus(raw:unknown):'awaiting_payment'|'reserved'|'cancelled'|'expired'|'UNKNOWN' {
+ const state=typeof raw==='string'?raw.trim().toLowerCase():'';
+ return state==='awaiting_payment'||state==='reserved'||state==='cancelled'||state==='expired'?state:'UNKNOWN';
+}
+export function contractPaymentStatus(raw:unknown):'unpaid'|'paid'|'refunded'|'partially_refunded'|'expired'|'not_applicable'|'UNKNOWN' {
+ const state=typeof raw==='string'?raw.trim().toLowerCase():'';
+ return state==='unpaid'||state==='paid'||state==='refunded'||state==='partially_refunded'||state==='expired'||state==='not_applicable'?state:'UNKNOWN';
+}
+export function contractState(reservation:unknown,payment:unknown){
+ return {reservationState:contractReservationStatus(reservation),paymentState:contractPaymentStatus(payment)};
+}
 export function status(raw){switch(txt(raw).trim().toUpperCase()){case 'CONFIRMED':case 'PAID':case 'SUCCESS':case 'COMPLETED':case 'CHECKED_IN':case 'CHECKED_OUT':return 'CONFIRMED';case 'DECLINED':case 'REJECTED':return 'DECLINED';case 'CANCELLED':case 'CANCELED':case 'REFUNDED':return 'CANCELLED';case 'FAILED':return 'FAILED';case 'PENDING':case 'HOLD':case 'PROCESSING':case 'RECORDED':case 'CONTACTED':return 'PENDING';default:return 'UNKNOWN'}}
 export function recompute(o){let yes=0,bad=0,pending=0,unknown=0,notattempted=0,amount=0,requiredOK=true;for(const a of o.items){if(a.status==='CONFIRMED'){yes++;amount+=n(a.amount)}else if(['DECLINED','CANCELLED','FAILED'].includes(a.status))bad++;else if(['PENDING','IN_FLIGHT'].includes(a.status))pending++;else if(a.status==='NOT_ATTEMPTED')notattempted++;else unknown++;if(o.packageId&&a.required&&a.status!=='CONFIRMED')requiredOK=false}
   o.estimatedSubtotal=o.items.filter(x=>['CONFIRMED','PENDING','IN_FLIGHT'].includes(x.status)).reduce((sum,x)=>sum+n(x.amount),0);
