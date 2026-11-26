@@ -194,7 +194,7 @@ export function createInteropClient(config:InteropConfig){
    if(!response.ok){
     let code='UPSTREAM_HTTP_ERROR';try{code=errorCode(await boundedJson(response))}catch{}
     // An unknown/malformed rejection or conflicting existing key needs reconciliation.
-    const definite=response.status===401||(response.status===400&&['CONSENT_REQUIRED','VALIDATION_ERROR','INVALID_REQUEST','INVALID_IDEMPOTENCY_KEY','INVALID_EXTERNAL_REF','INVALID_HOLD','INVALID_CUSTOMER','INVALID_QUANTITY','BAD_JSON','IDEMPOTENCY_REQUIRED'].includes(code))||(response.status===409&&['NOT_AVAILABLE','HOLD_EXPIRED','HOLD_RELEASED','ALREADY_CONFIRMED','HOLD_NOT_ACTIVE'].includes(code))||(response.status===415&&code==='UNSUPPORTED_MEDIA_TYPE')||(response.status===503&&code==='INTEROP_NOT_CONFIGURED')||(response.status===422&&code==='INVALID_OFFER';
+    const definite=response.status===401||(response.status===400&&['CONSENT_REQUIRED','VALIDATION_ERROR','INVALID_REQUEST','INVALID_IDEMPOTENCY_KEY','INVALID_EXTERNAL_REF','INVALID_HOLD','INVALID_CUSTOMER','INVALID_QUANTITY','BAD_JSON','IDEMPOTENCY_REQUIRED'].includes(code))||(response.status===409&&['NOT_AVAILABLE','HOLD_EXPIRED','HOLD_RELEASED','ALREADY_CONFIRMED','HOLD_NOT_ACTIVE'].includes(code))||(response.status===415&&code==='UNSUPPORTED_MEDIA_TYPE')||(response.status===503&&code==='INTEROP_NOT_CONFIGURED')||(response.status===422&&code==='INVALID_OFFER');
     throw new InteropError(provider,op,response.status,code,mut&&!definite);
    }
    try{requireShape(allowed.includes(response.status));return parse(await boundedJson(response))}
