@@ -196,3 +196,14 @@ test('I4 mutation policies: no trusted server approval means no remote call or D
  assert.equal(a.calls.confirm,0);
  assert.equal((await f.db.prepare("SELECT COUNT(*) AS n FROM jt_interop_operations WHERE operation='CONFIRM'").first()).n,0);
 });
+
+test('final PR: documented rejection after earlier HOLD compensates; unknown code must not release',async t=>{
+ for(const [status,code,unknown] of [[400,'INVALID_CUSTOMER',false],[400,'INVALID_QUANTITY',false],[415,'UNSUPPORTED_MEDIA_TYPE',false],[503,'INTEROP_NOT_CONFIGURED',false],[503,'UPSTREAM_BUSY',true],[409,'IDEMPOTENCY_CONFLICT',true]]){
+  const f=await fixture(t,['transport','wisata']);
+  const a=fake('transport'),b=fake('wisata',{holdError:error('wisata','hold',status,code,unknown)});
+  const r=await run(f,{transport:a.client,wisata:b.client}).hold(f.id,f.token);
+  assert.equal(r.status,unknown?'UNKNOWN':'COMPENSATED',code);
+  assert.equal(a.calls.release,unknown?0:1,code);
+  assert.equal(b.calls.hold,1,code);
+ }
+});
