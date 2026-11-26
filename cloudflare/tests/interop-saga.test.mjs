@@ -234,3 +234,33 @@ test('final PR staging rehearsal: third provider definitive HOLD failure compens
  assert.equal(hotel.calls.confirm+wisata.calls.confirm+transport.calls.confirm,0);
  assert.equal((await operations(f)).filter(o=>o.operation==='RELEASE'&&o.state==='SUCCEEDED').length,2);
 });
+
+test('I6 mock rehearsal: UNKNOWN at third HOLD keeps two earlier holds and forbids CONFIRM/release',async t=>{
+ const f=await fixture(t,['hotel','wisata','transport']);
+ const hotel=fake('hotel'),wisata=fake('wisata');
+ const transport=fake('transport',{holdError:error('transport','hold',504,'UPSTREAM_TIMEOUT',true)});
+ const s=run(f,{hotel:hotel.client,wisata:wisata.client,transport:transport.client});
+ const result=await s.hold(f.id,f.token);
+ assert.equal(result.status,'UNKNOWN');
+ assert.equal(hotel.calls.hold,1);assert.equal(wisata.calls.hold,1);assert.equal(transport.calls.hold,1);
+ assert.equal(hotel.calls.release+wisata.calls.release+transport.calls.release,0);
+ assert.equal(hotel.calls.confirm+wisata.calls.confirm+transport.calls.confirm,0);
+ assert.equal((await s.confirm(f.id,f.token)).status,'BLOCKED');
+ assert.equal((await operations(f)).filter(o=>o.state==='UNKNOWN').length,1);
+});
+test('I6 mock rehearsal: third CONFIRM definite rejection produces PARTIAL without automatic compensation',async t=>{
+ const f=await fixture(t,['hotel','wisata','transport']);
+ const hotel=fake('hotel'),wisata=fake('wisata');
+ const transport=fake('transport',{confirmError:error('transport','confirm',409,'HOLD_EXPIRED',false)});
+ const s=run(f,{hotel:hotel.client,wisata:wisata.client,transport:transport.client});
+ assert.equal((await s.hold(f.id,f.token)).status,'AWAITING_CONFIRMATION');
+ const result=await s.confirm(f.id,f.token);
+ assert.equal(result.status,'PARTIAL');
+ assert.equal(result.completed,2);
+ assert.equal(hotel.calls.confirm,1);assert.equal(wisata.calls.confirm,1);assert.equal(transport.calls.confirm,1);
+ assert.equal(hotel.calls.release+wisata.calls.release+transport.calls.release,0);
+ assert.equal((await s.confirm(f.id,f.token)).status,'BLOCKED');
+ const ops=await operations(f);
+ assert.equal(ops.filter(o=>o.operation==='CONFIRM'&&o.state==='SUCCEEDED').length,2);
+ assert.equal(ops.filter(o=>o.operation==='CONFIRM'&&o.state==='REJECTED').length,1);
+});
