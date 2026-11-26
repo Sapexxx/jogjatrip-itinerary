@@ -10,7 +10,8 @@
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "check:transport-live": "node tools/check-transport-live.mjs",
     "typecheck": "npx --yes --package typescript@5.9.3 tsc --noEmit",
-    "check:interop-readonly-staging": "node --experimental-strip-types tools/check-interop-contract-readonly.mjs"
+    "check:interop-readonly-staging": "node --experimental-strip-types tools/check-interop-contract-readonly.mjs",
+    "check:i6-release-evidence": "node tools/check-i6-release-evidence.mjs"
   },
   "devDependencies": {
     "miniflare": "5.20261118.0-beta",
