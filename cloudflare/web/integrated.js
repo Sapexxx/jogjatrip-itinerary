@@ -288,3 +288,8 @@ integratedTransportPreference();
 // Main catalog is asynchronous. Refresh the integrated selection once loaded.
 const oldRenderCatalog=renderCatalog;
 renderCatalog=function(){oldRenderCatalog();if(ie('ibHotelOptions'))integratedRender()};
+
+// I5: local draft only. The plan token and customer fields never enter the preview.
+window.JTInteropI5Plan=()=>({id:planState.id,items:planState.activities.filter(a=>a.sourceItem&&!a.orderId).map(a=>({...a.sourceItem})),quote:integrated.quote?{total:integrated.quote.total,items:integrated.quote.items,available:integrated.quote.available}:null});
+const jtI5IntegratedRender=integratedRender;
+integratedRender=function(){const value=jtI5IntegratedRender.apply(this,arguments);window.JTInteropI5Mounted?.refresh('plan');return value};
