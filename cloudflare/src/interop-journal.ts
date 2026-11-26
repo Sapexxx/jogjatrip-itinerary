@@ -39,7 +39,7 @@ const accessPattern=/^[a-f0-9]{64}$/;
 const orderPattern=/^JT-[a-f0-9]{32}$/;
 const opNames=new Set(['HOLD','CONFIRM','RELEASE']);
 const payment=new Set(['unpaid','paid','refunded','partially_refunded','expired','not_applicable']);
-const errorCodes=new Set(['CONSENT_REQUIRED','IDEMPOTENCY_CONFLICT','NOT_AVAILABLE','INVALID_OFFER','HOLD_EXPIRED','HOLD_RELEASED','ALREADY_CONFIRMED','UNAUTHORIZED','INVALID_TOKEN','NOT_FOUND','VALIDATION_ERROR','INVALID_REQUEST','INVALID_IDEMPOTENCY_KEY','INVALID_EXTERNAL_REF','UPSTREAM_HTTP_ERROR','UPSTREAM_UNREACHABLE','UPSTREAM_TIMEOUT','INVALID_PROVIDER_RESPONSE']);
+const errorCodes=new Set(['CONSENT_REQUIRED','IDEMPOTENCY_CONFLICT','NOT_AVAILABLE','INVALID_OFFER','HOLD_EXPIRED','HOLD_RELEASED','ALREADY_CONFIRMED','UNAUTHORIZED','INVALID_TOKEN','NOT_FOUND','VALIDATION_ERROR','INVALID_REQUEST','INVALID_IDEMPOTENCY_KEY','INVALID_EXTERNAL_REF','INVALID_HOLD','INVALID_CUSTOMER','INVALID_QUANTITY','BAD_JSON','IDEMPOTENCY_REQUIRED','UNSUPPORTED_MEDIA_TYPE','HOLD_NOT_ACTIVE','INTEROP_NOT_CONFIGURED','UPSTREAM_HTTP_ERROR','UPSTREAM_UNREACHABLE','UPSTREAM_TIMEOUT','INVALID_PROVIDER_RESPONSE']);
 function text(v:unknown,max=512,empty=false):string{demand(typeof v==='string'&&v.length<=max&&(empty||v.trim().length>0));return v as string}
 function int(v:unknown,min=0,max=Number.MAX_SAFE_INTEGER):number{demand(typeof v==='number'&&Number.isSafeInteger(v)&&v>=min&&v<=max);return v as number}
 function utc(v:unknown):string{const s=text(v,40);demand(/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,3})?Z$/.test(s)&&asDate(s.slice(0,10))&&Number.isFinite(Date.parse(s)));return s}
@@ -224,7 +224,7 @@ export function createInteropJournal(db:D1Binding,options:{now?:()=>number;lease
    code=errorCodes.has(outcome.code)?outcome.code:'UPSTREAM_HTTP_ERROR';
    httpStatus=outcome.httpStatus===undefined?null:int(outcome.httpStatus,100,599);
    // Definitive rejection must be an explicit, known non-mutating contract response.
-   if(outcome.state==='REJECTED')demand(httpStatus===401||(httpStatus===400&&['CONSENT_REQUIRED','VALIDATION_ERROR','INVALID_REQUEST','INVALID_IDEMPOTENCY_KEY','INVALID_EXTERNAL_REF'].includes(code))||(httpStatus===409&&['NOT_AVAILABLE','HOLD_EXPIRED','HOLD_RELEASED'].includes(code))||(httpStatus===422&&code==='INVALID_OFFER'),'AMBIGUOUS_OUTCOME',409);
+   if(outcome.state==='REJECTED')demand(httpStatus===401||(httpStatus===400&&['CONSENT_REQUIRED','VALIDATION_ERROR','INVALID_REQUEST','INVALID_IDEMPOTENCY_KEY','INVALID_EXTERNAL_REF','INVALID_HOLD','INVALID_CUSTOMER','INVALID_QUANTITY','BAD_JSON','IDEMPOTENCY_REQUIRED'].includes(code))||(httpStatus===409&&['NOT_AVAILABLE','HOLD_EXPIRED','HOLD_RELEASED','HOLD_NOT_ACTIVE'].includes(code))||(httpStatus===415&&code==='UNSUPPORTED_MEDIA_TYPE')||(httpStatus===503&&code==='INTEROP_NOT_CONFIGURED')||(httpStatus===422&&code==='INVALID_OFFER'),'AMBIGUOUS_OUTCOME',409);
   }
   const r=await db.prepare('UPDATE jt_interop_operations SET state=?,result_json=?,error_code=?,http_status=?,hold_id=?,revision=revision+1,updated_at=? WHERE order_id=? AND item_index=? AND operation=? AND revision=? AND '+unresolved+' AND '+liveLock).bind(outcome.state,resultJson,code,httpStatus,holdId,iso(),proof.orderId,index,operation,expectedRevision,proof.orderId,hash,proof.fence,proof.purpose,now()).run();
   demand(changed(r),'REVISION_OR_LOCK_CONFLICT',409);

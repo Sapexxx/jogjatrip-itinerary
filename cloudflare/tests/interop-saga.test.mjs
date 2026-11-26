@@ -9,14 +9,15 @@ import {mockProvider,TOKEN} from './fixtures/interop-provider.mjs';
 
 const access='c'.repeat(64),time=Date.parse('2026-12-01T03:00:00Z');
 const items={
+ hotel:{type:'hotel',hotelId:'H-01',roomId:'RM-01',checkIn:'2026-12-12',checkOut:'2026-12-14',guests:2},
  transport:{type:'transport',vehicleId:'R-01',startDate:'2026-12-12',endDate:'2026-12-14',withDriver:false},
  wisata:{type:'wisata',destinationId:101,visitDate:'2026-12-13',quantity:1,tier:'base'}
 };
 const wanted=(types)=>({customer:{name:'Synthetic I4 Customer',phone:'0800000000'},consent:true,source:{kind:'cart'},
  items:types.map(kind=>({item:items[kind],expectedTotal:10000}))});
 function offered(kind,id='opaque-fixture'){
- return {provider:kind,entityType:kind==='transport'?'vehicle_rental':'tourist_attraction',resourceId:'R-01',offerId:id,
- quantity:1,period:{startDate:kind==='transport'?'2026-12-12':'2026-12-13',endDate:kind==='transport'?'2026-12-14':'2026-12-13'},
+ return {provider:kind,entityType:kind==='transport'?'vehicle_rental':kind==='hotel'?'lodging':'tourist_attraction',resourceId:kind==='hotel'?'RM-01':kind==='transport'?'R-01':'101',offerId:id,
+ quantity:1,period:{startDate:kind==='wisata'?'2026-12-13':'2026-12-12',endDate:kind==='wisata'?'2026-12-13':'2026-12-14'},
  totalPrice:10000,currency:'IDR',generatedAt:'2026-12-01T03:00:00Z'};
 }
 const sql=n=>readFileSync(new URL('../migrations/'+n,import.meta.url),'utf8');
@@ -195,4 +196,41 @@ test('I4 mutation policies: no trusted server approval means no remote call or D
  await assert.rejects(deniedConfirm.confirm(f.id,f.token),/CONFIRM_POLICY_REQUIRED/);
  assert.equal(a.calls.confirm,0);
  assert.equal((await f.db.prepare("SELECT COUNT(*) AS n FROM jt_interop_operations WHERE operation='CONFIRM'").first()).n,0);
+});
+
+test('final PR: documented rejection after earlier HOLD compensates; unknown code must not release',async t=>{
+ for(const [status,code,unknown] of [[400,'INVALID_CUSTOMER',false],[400,'INVALID_QUANTITY',false],[415,'UNSUPPORTED_MEDIA_TYPE',false],[503,'INTEROP_NOT_CONFIGURED',false],[503,'UPSTREAM_BUSY',true],[409,'IDEMPOTENCY_CONFLICT',true]]){
+  const f=await fixture(t,['transport','wisata']);
+  const a=fake('transport'),b=fake('wisata',{holdError:error('wisata','hold',status,code,unknown)});
+  const r=await run(f,{transport:a.client,wisata:b.client}).hold(f.id,f.token);
+  assert.equal(r.status,unknown?'UNKNOWN':'COMPENSATED',code);
+  assert.equal(a.calls.release,unknown?0:1,code);
+  assert.equal(b.calls.hold,1,code);
+ }
+});
+
+test('final PR staging rehearsal: all 3 synthetic providers HOLD before any CONFIRM, one shared externalRef',async t=>{
+ const types=['hotel','wisata','transport'],f=await fixture(t,types);
+ const providers=Object.fromEntries(types.map(k=>[k,fake(k)]));
+ const order=[],clients=Object.fromEntries(types.map(k=>[k,{
+  ...providers[k].client,
+  hold:async(body,key)=>{order.push('HOLD:'+k);assert.equal(body.externalRef,f.id);return providers[k].client.hold(body,key)},
+  confirm:async(id,key)=>{order.push('CONFIRM:'+k);return providers[k].client.confirm(id,key)}
+ }]));
+ const s=run(f,clients);
+ assert.equal((await s.hold(f.id,f.token)).status,'AWAITING_CONFIRMATION');
+ assert.deepEqual(order,['HOLD:hotel','HOLD:wisata','HOLD:transport']);
+ assert.equal((await s.confirm(f.id,f.token)).status,'CONFIRMED');
+ assert.deepEqual(order,['HOLD:hotel','HOLD:wisata','HOLD:transport','CONFIRM:hotel','CONFIRM:wisata','CONFIRM:transport']);
+ assert.equal((await operations(f)).filter(x=>x.state==='SUCCEEDED').length,6);
+});
+test('final PR staging rehearsal: third provider definitive HOLD failure compensates first two in reverse order',async t=>{
+ const f=await fixture(t,['hotel','wisata','transport']);
+ const hotel=fake('hotel'),wisata=fake('wisata'),transport=fake('transport',{holdError:error('transport','hold',400,'INVALID_CUSTOMER',false)});
+ const sequence=[],wrap=(kind,c)=>({...c,release:async(id,key)=>{sequence.push(kind);return c.release(id,key)}});
+ const s=run(f,{hotel:wrap('hotel',hotel.client),wisata:wrap('wisata',wisata.client),transport:transport.client});
+ assert.equal((await s.hold(f.id,f.token)).status,'COMPENSATED');
+ assert.deepEqual(sequence,['wisata','hotel']);
+ assert.equal(hotel.calls.confirm+wisata.calls.confirm+transport.calls.confirm,0);
+ assert.equal((await operations(f)).filter(o=>o.operation==='RELEASE'&&o.state==='SUCCEEDED').length,2);
 });
