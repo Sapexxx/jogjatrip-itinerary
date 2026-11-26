@@ -60,7 +60,7 @@ async function planSetup(t){
   activities:[{type:'transport',title:'Rental',date:'2026-12-12',startTime:'09:00',endTime:'11:00',sourceItem:item}]});
  const id=created.itinerary.id,auth=new Request('https://fixture.test/api/interop/itineraries/'+id+'/prepare',{
   method:'POST',headers:{'X-Plan-Token':created.accessToken}});
- const input={key:'checkout_i5_plan_test_0001',accessToken:'c'.repeat(64),consent:true,customer:{name:'Synthetic Plan',phone:'0800000000',email:'test@example.test'}};
+ const input={key:'checkout_i5_plan_test_0001',accessToken:'c'.repeat(64),consent:true,approvedTotal:10000,customer:{name:'Synthetic Plan',phone:'0800000000',email:'test@example.test'}};
  return {...f,env,id,auth,input,ownerToken:created.accessToken};
 }
 test('I5: trusted plan-only preparation persists immutable D1 snapshot and never books',async t=>{
@@ -106,4 +106,38 @@ test('I5: public preparation endpoint denies when server trusted verifier unavai
  const data=await response.json();
  assert.equal(data.error,'TRUSTED_SELECTION_VERIFIER_REQUIRED');
  assert.equal((await f.env.DB.prepare('SELECT order_lock FROM jt_plans WHERE id=?').bind(f.id).first()).order_lock,null);
+});
+
+test('I5: changed customer or approved price cannot reuse original checkout',async t=>{
+ const f=await planSetup(t),remote=mockProvider('transport');
+ const gateway=createInteropPlanPreparation(f.env,remote.fetcher,{verifySelection:()=>true});
+ const first=await gateway.prepare(f.id,f.auth,f.input);
+ assert.equal(first.created,true);
+ for(const changed of [
+  {...f.input,customer:{...f.input.customer,name:'Different Customer'}},
+  {...f.input,approvedTotal:11000}
+ ]){
+  await assert.rejects(gateway.prepare(f.id,f.auth,changed),e=>e instanceof PreparationError&&e.code==='IDEMPOTENCY_CONFLICT');
+ }
+ const persisted=await f.journal.loadCheckout(first.orderId,f.input.accessToken);
+ assert.equal(persisted.intent.customer.name,'Synthetic Plan');
+ assert.equal(persisted.intent.items[0].expectedTotal,10000);
+ assert.equal(remote.calls.filter(c=>c.method==='POST').length,0);
+});
+test('I5: changed provider price fails closed before D1 checkout and releases plan lock',async t=>{
+ const f=await planSetup(t),remote=mockProvider('transport');
+ const gateway=createInteropPlanPreparation(f.env,remote.fetcher,{verifySelection:()=>true});
+ await assert.rejects(gateway.prepare(f.id,f.auth,{...f.input,approvedTotal:9000}),
+  e=>e instanceof PreparationError&&e.code==='PRICE_CHANGED');
+ assert.equal((await f.env.DB.prepare('SELECT order_lock FROM jt_plans WHERE id=?').bind(f.id).first()).order_lock,null);
+ const count=await f.env.DB.prepare('SELECT COUNT(*) AS n FROM jt_checkout_requests').first();
+ assert.equal(count.n,1); // the initial cart fixture, no plan checkout
+ assert.equal(remote.calls.filter(c=>c.method==='POST').length,0);
+});
+test('I5: explicit approved price is required before any network call',async t=>{
+ const f=await planSetup(t),remote=mockProvider('transport');
+ const gateway=createInteropPlanPreparation(f.env,remote.fetcher,{verifySelection:()=>true});
+ await assert.rejects(gateway.prepare(f.id,f.auth,{...f.input,approvedTotal:undefined}),
+  e=>e instanceof PreparationError&&e.code==='INVALID_CHECKOUT_INPUT');
+ assert.equal(remote.calls.length,0);
 });

@@ -26,7 +26,7 @@ function verifiedReject(e:unknown):e is InteropError {
 }
 function codeOf(e:unknown){return e instanceof InteropError?e.code:'UPSTREAM_HTTP_ERROR'}
 function httpOf(e:unknown){return e instanceof InteropError?e.status:502}
-export function createHoldSaga(journal:Journal,clients:Clients,options:{now?:()=>number;minTtlMs?:number}={}){
+export function createHoldSaga(journal:Journal,clients:Clients,options:{now?:()=>number;minTtlMs?:number;authorizeRecovery?:(orderId:string)=>boolean|Promise<boolean>;authorizeHold?:(orderId:string)=>boolean|Promise<boolean>;authorizeConfirm?:(orderId:string)=>boolean|Promise<boolean>}={}){
  const now=options.now??Date.now,minimum=options.minTtlMs??120000;
  if(!Number.isSafeInteger(minimum)||minimum<0||minimum>900000)throw Error('Invalid minimum hold TTL');
  const client=(provider:ProviderKind):Client=>{
@@ -52,6 +52,9 @@ export function createHoldSaga(journal:Journal,clients:Clients,options:{now?:()=
   return true;
  }
  async function hold(orderId:string,token:string):Promise<SagaResult>{
+  // Only trusted orchestration may open remote provider holds.
+  if(!options.authorizeHold||await options.authorizeHold(orderId)!==true)
+   throw Error('HOLD_POLICY_REQUIRED');
   const proof=await journal.claimLock(orderId,token);
   let total=0,done=0;
   try{
@@ -90,6 +93,10 @@ export function createHoldSaga(journal:Journal,clients:Clients,options:{now?:()=
   }
  }
  async function confirm(orderId:string,token:string):Promise<SagaResult>{
+  // Confirmation requires explicit server policy, not a browser assertion or
+  // an inference that a successful HOLD means customer payment.
+  if(!options.authorizeConfirm||await options.authorizeConfirm(orderId)!==true)
+   throw Error('CONFIRM_POLICY_REQUIRED');
   const proof=await journal.claimLock(orderId,token);
   let total=0,done=0;
   try{
@@ -129,6 +136,10 @@ export function createHoldSaga(journal:Journal,clients:Clients,options:{now?:()=
   * No replay of HOLD (no known hold ID), no remote mutation and no automatic takeover.
   */
  async function reconcile(orderId:string,token:string,expectedFence:number,quiescenceConfirmed:boolean):Promise<SagaResult>{
+  // Caller-controlled booleans do not grant operator access. A trusted server
+  // authorization callback must be injected before recovering a fenced lock.
+  if(!options.authorizeRecovery||await options.authorizeRecovery(orderId)!==true)
+   throw Error('OPERATOR_AUTH_REQUIRED');
   const proof=await journal.recoverExpiredLock(orderId,token,expectedFence,quiescenceConfirmed);
   let total=0,done=0;
   try{
