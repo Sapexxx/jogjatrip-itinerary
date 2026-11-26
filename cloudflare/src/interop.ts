@@ -51,7 +51,7 @@ const regions=new Set(vocabulary.regions.map(r=>r.conceptId));
 const paymentStates=new Set<string>(vocabulary.statusMappings.paymentState.values);
 const states=new Set<string>(['awaiting_payment','reserved','cancelled','expired']);
 const priceUnits=new Set<string>(['night','ticket','day','trip','person']);
-const stableCodes=new Set(['CONSENT_REQUIRED','IDEMPOTENCY_CONFLICT','NOT_AVAILABLE','INVALID_OFFER','HOLD_EXPIRED','HOLD_RELEASED','ALREADY_CONFIRMED','UNAUTHORIZED','INVALID_TOKEN','NOT_FOUND','VALIDATION_ERROR','INVALID_REQUEST','INVALID_IDEMPOTENCY_KEY','INVALID_EXTERNAL_REF']);
+const stableCodes=new Set(['CONSENT_REQUIRED','IDEMPOTENCY_CONFLICT','NOT_AVAILABLE','INVALID_OFFER','HOLD_EXPIRED','HOLD_RELEASED','ALREADY_CONFIRMED','UNAUTHORIZED','INVALID_TOKEN','NOT_FOUND','VALIDATION_ERROR','INVALID_REQUEST','INVALID_IDEMPOTENCY_KEY','INVALID_EXTERNAL_REF','INVALID_HOLD','INVALID_CUSTOMER','INVALID_QUANTITY','BAD_JSON','IDEMPOTENCY_REQUIRED','UNSUPPORTED_MEDIA_TYPE','HOLD_NOT_ACTIVE','INTEROP_NOT_CONFIGURED']);
 const idemPattern=/^[A-Za-z0-9_-]{16,100}$/;
 const externalPattern=/^[A-Za-z0-9_-]{1,64}$/;
 const maxBody=2_000_000;
@@ -194,7 +194,7 @@ export function createInteropClient(config:InteropConfig){
    if(!response.ok){
     let code='UPSTREAM_HTTP_ERROR';try{code=errorCode(await boundedJson(response))}catch{}
     // An unknown/malformed rejection or conflicting existing key needs reconciliation.
-    const definite=response.status===401||(response.status===400&&['CONSENT_REQUIRED','VALIDATION_ERROR','INVALID_REQUEST','INVALID_IDEMPOTENCY_KEY','INVALID_EXTERNAL_REF'].includes(code))||(response.status===409&&['NOT_AVAILABLE','HOLD_EXPIRED','HOLD_RELEASED','ALREADY_CONFIRMED'].includes(code))||response.status===422&&code==='INVALID_OFFER';
+    const definite=response.status===401||(response.status===400&&['CONSENT_REQUIRED','VALIDATION_ERROR','INVALID_REQUEST','INVALID_IDEMPOTENCY_KEY','INVALID_EXTERNAL_REF','INVALID_HOLD','INVALID_CUSTOMER','INVALID_QUANTITY','BAD_JSON','IDEMPOTENCY_REQUIRED'].includes(code))||(response.status===409&&['NOT_AVAILABLE','HOLD_EXPIRED','HOLD_RELEASED','ALREADY_CONFIRMED','HOLD_NOT_ACTIVE'].includes(code))||(response.status===415&&code==='UNSUPPORTED_MEDIA_TYPE')||(response.status===503&&code==='INTEROP_NOT_CONFIGURED')||(response.status===422&&code==='INVALID_OFFER';
     throw new InteropError(provider,op,response.status,code,mut&&!definite);
    }
    try{requireShape(allowed.includes(response.status));return parse(await boundedJson(response))}
