@@ -1,0 +1,29 @@
+@prefix jt: <https://example.org/jogjatrip/vocabulary#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+# Prototype namespace; replace with a stable URI before formal publication.
+jt:TravelPackage a owl:Class ; rdfs:label "Paket perjalanan"@id .
+jt:Itinerary a owl:Class ; rdfs:label "Rencana perjalanan"@id .
+jt:Activity a owl:Class .
+jt:HotelStay a owl:Class ; rdfs:subClassOf jt:Activity .
+jt:AttractionVisit a owl:Class ; rdfs:subClassOf jt:Activity .
+jt:Region a owl:Class .
+jt:ProviderService a owl:Class .
+jt:BookingReference a owl:Class .
+
+jt:hasItinerary a owl:ObjectProperty ; rdfs:domain jt:TravelPackage ; rdfs:range jt:Itinerary .
+jt:hasActivity a owl:ObjectProperty ; rdfs:domain jt:Itinerary ; rdfs:range jt:Activity .
+jt:coversRegion a owl:ObjectProperty ; rdfs:domain jt:TravelPackage ; rdfs:range jt:Region .
+jt:activityInRegion a owl:ObjectProperty ; rdfs:domain jt:Activity ; rdfs:range jt:Region .
+jt:hasProviderBooking a owl:ObjectProperty ; rdfs:domain jt:Activity ; rdfs:range jt:BookingReference .
+jt:ownedByProvider a owl:ObjectProperty ; rdfs:domain jt:BookingReference ; rdfs:range jt:ProviderService .
+jt:startsOn a owl:DatatypeProperty ; rdfs:domain jt:Activity ; rdfs:range xsd:date .
+
+jt:Sleman a jt:Region, skos:Concept ; skos:prefLabel "Kabupaten Sleman"@id ; skos:altLabel "Sleman"@id, "kabupaten-sleman"@id .
+jt:Bantul a jt:Region, skos:Concept ; skos:prefLabel "Kabupaten Bantul"@id ; skos:altLabel "Bantul"@id, "kabupaten-bantul"@id .
+jt:YogyakartaCity a jt:Region, skos:Concept ; skos:prefLabel "Kota Yogyakarta"@id ; skos:altLabel "kota-yogyakarta"@id .
+jt:Gunungkidul a jt:Region, skos:Concept ; skos:prefLabel "Kabupaten Gunungkidul"@id ; skos:altLabel "Gunungkidul"@id, "kabupaten-gunungkidul"@id .
+jt:KulonProgo a jt:Region, skos:Concept ; skos:prefLabel "Kabupaten Kulon Progo"@id ; skos:altLabel "Kulon Progo"@id, "kabupaten-kulon-progo"@id .
