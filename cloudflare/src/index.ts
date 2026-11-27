@@ -12,6 +12,12 @@ import {templates,getPackage,expand,bookPackage,planFromOrder} from './packages.
 function parts(path: string){return path.split('/').filter(Boolean)}
 async function handle(req: Request,env: WorkerEnv): Promise<Response>{if(!env.DB)fail(503,'Binding Cloudflare D1 belum dikonfigurasi');let u=new URL(req.url),p=parts(u.pathname),method=req.method;
  if(p[0]!=='api')return env.ASSETS.fetch(req);
+ // I5: recover the original persisted checkout without repeating preflight or creating an order.
+ if(p.length===5&&p[1]==='interop'&&p[2]==='itineraries'&&p[4]==='prepare'&&method==='GET'){
+  if(env.INTEROP_HOLDS!=='true')fail(404,'Endpoint tidak tersedia');
+  const result=await createInteropPlanPreparation(env,()=>{throw Error('Recovery must not fetch providers')}).recover(p[3],req,req.headers.get('X-Checkout-Key')||'',req.headers.get('X-Interop-Token')||'');
+  return new Response(JSON.stringify(result),{status:200,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Pragma':'no-cache','X-Content-Type-Options':'nosniff'}});
+ }
  // I5: authenticated PLAN-only preparation. No provider mutation; no built-in
  // trusted selection verifier unless the separate prepare-only flag is enabled.
  if(p.length===5&&p[1]==='interop'&&p[2]==='itineraries'&&p[4]==='prepare'&&method==='POST'){

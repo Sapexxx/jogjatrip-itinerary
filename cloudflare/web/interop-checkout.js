@@ -64,6 +64,7 @@ function createDraftManager(storage,cryptoProvider,clock=()=>Date.now()){
   storage.setItem(slot(scope),JSON.stringify(updated));
   return updated;
  }
+ function createToken(){const bytes=new Uint8Array(32);cryptoProvider.getRandomValues(bytes);return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('')}
  // This is a prepare-only request, never a provider HOLD or CONFIRM.
  async function prepareServer(input,approval,fetcher,onToken=()=>{}){
   const problem=inspect(input);if(problem)throw Error(problem);
@@ -78,8 +79,7 @@ function createDraftManager(storage,cryptoProvider,clock=()=>Date.now()){
   const approvedItems=JSON.parse(JSON.stringify(input.items));
   const draft=await prepare({...input,items:approvedItems});
   assert(!LOCKED.has(get(scope)?.state),'CHECKOUT_STATE_LOCKED');
-  const bytes=new Uint8Array(32);cryptoProvider.getRandomValues(bytes);
-  const accessToken=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+  const accessToken=approval.accessToken??createToken();assert(typeof accessToken==='string'&&/^[a-f0-9]{64}$/.test(accessToken),'INVALID_CHECKOUT_TOKEN');
   // Persist a nonsecret lock before network I/O. Never automatically replay a
   // possibly persisted preparation; recovery is a separate operator/user flow.
   transition(scope,'IN_FLIGHT');
@@ -97,11 +97,28 @@ function createDraftManager(storage,cryptoProvider,clock=()=>Date.now()){
    return {orderId:result.orderId,created:result.created,bookingPerformed:false};
   }catch(e){transition(scope,'UNKNOWN');throw e}
  }
+ async function recoverServer(scope,planToken,token,fetcher){
+  const prior=get(scope);
+  assert(/^plan:[A-Za-z0-9_-]{1,128}$/.test(scope)&&prior&&LOCKED.has(prior.state),'RECOVERY_REFERENCE_REQUIRED');
+  assert(typeof planToken==='string'&&/^[a-f0-9]{48}$/.test(planToken)&&typeof token==='string'&&/^[a-f0-9]{64}$/.test(token),'RECOVERY_AUTH_REQUIRED');
+  const response=await fetcher('/api/interop/itineraries/'+encodeURIComponent(scope.slice(5))+'/prepare',{
+   method:'GET',credentials:'same-origin',cache:'no-store',referrerPolicy:'no-referrer',redirect:'error',
+   headers:{Accept:'application/json','X-Plan-Token':planToken,'X-Checkout-Key':prior.key,'X-Interop-Token':token}
+  });
+  if(!response.ok)throw Error('RECOVERY_NOT_VERIFIED');
+  const data=await response.json();
+  assert(data.verifiedBy==='D1_JOURNAL'&&/^JT-[a-f0-9]{32}$/.test(data.orderId)&&(!prior.orderId||prior.orderId===data.orderId)&&data.paymentVerified===false&&data.bookingsAtomic===false&&(data.status==='NOT_STARTED'||STATES.has(data.status)&&!['DRAFT','PREPARED'].includes(data.status)),'INVALID_RECOVERY_RESPONSE');
+  // Always retain the local lock: even a terminal journal result is not proof
+  // that the plan is editable or that a second checkout is authorized.
+  const current=get(scope);assert(current&&current.key===prior.key,'RECOVERY_REFERENCE_CHANGED');
+  storage.setItem(slot(scope),JSON.stringify({...current,state:data.status==='NOT_STARTED'?'PREPARED':LOCKED.has(data.status)?data.status:'PREPARED',orderId:data.orderId}));
+  return data;
+ }
  function reset(scope){
   const prior=get(scope);if(prior&&LOCKED.has(prior.state))throw new Error('CHECKOUT_STATE_LOCKED');
   storage.removeItem(slot(scope));
  }
- return Object.freeze({get,prepare,prepareServer,reset});
+ return Object.freeze({get,prepare,prepareServer,createToken,recoverServer,reset});
 }
 const descriptions={
  PREPARED:'Snapshot checkout tersimpan di D1. Belum ada HOLD, CONFIRM atau pembayaran. Jangan membuat checkout baru.',
@@ -176,23 +193,32 @@ function mount(){
    const amount=doc.createElement('span');priceLabel.append(price,amount);
    const submit=doc.createElement('button');submit.type='button';submit.className='outlinewide';submit.textContent='Siapkan checkout di server (tanpa booking)';
    const out=doc.createElement('p');out.setAttribute('role','status');out.setAttribute('aria-live','polite');
-   const help=doc.createElement('small');help.textContent='Persetujuan ini tidak melakukan pembayaran atau CONFIRM. Simpan token akses secara aman jika diperlukan; jangan bagikan token.';
-   section.append(dataLabel,priceLabel,submit,out,help);el.append(heading,detail,action,note,section,statusForm);
-   prep={section,consent,price,amount,submit,out,busy:false,signature:null};
+   const help=doc.createElement('small');help.textContent='Persetujuan ini tidak melakukan pembayaran atau CONFIRM. Buat dan simpan token sebelum mengirim checkout. Token tidak dapat dipulihkan dari server.';
+   const makeToken=doc.createElement('button');makeToken.type='button';makeToken.className='outlinewide';makeToken.textContent='Buat token akses checkout';
+   const savedLabel=doc.createElement('label'),saved=doc.createElement('input');saved.type='checkbox';saved.checked=false;savedLabel.append(saved,doc.createTextNode(' Saya sudah menyimpan token akses secara aman.'));
+   section.append(dataLabel,priceLabel,makeToken,savedLabel,submit,out,help);el.append(heading,detail,action,note,section,statusForm);
+   prep={section,consent,price,amount,submit,out,makeToken,saved,token:null,busy:false,signature:null};
+   makeToken.addEventListener('click',()=>{if(makeToken.disabled)return;prep.token=manager.createToken();tokenInput.value=prep.token;saved.checked=false;out.textContent='Token tersedia pada kolom status. Salin dan simpan secara aman sebelum melanjutkan.';refresh('plan')});
+   const copyToken=doc.createElement('button');copyToken.type='button';copyToken.className='outlinewide';copyToken.textContent='Salin token akses';
+   copyToken.addEventListener('click',async()=>{if(!/^[a-f0-9]{64}$/.test(tokenInput.value))return;try{await root.navigator.clipboard.writeText(tokenInput.value);statusOut.textContent='Token disalin. Simpan secara aman.'}catch{statusOut.textContent='Salin token secara manual dari kolom token.';tokenInput.select()}});
+   const recover=doc.createElement('button');recover.type='button';recover.className='outlinewide';recover.textContent='Pulihkan ID checkout dari referensi asli (baca saja)';
+   recover.addEventListener('click',async()=>{const input=view.get(),live=root.JTInteropI5Plan?.();if(!input||!live||recover.disabled)return;recover.disabled=true;try{const data=await manager.recoverServer(input.scope,live.planToken,tokenInput.value.trim(),root.fetch.bind(root));orderInput.value=data.orderId;statusOut.textContent='D1 journal: '+data.status+'. ID checkout berhasil dipulihkan. Tidak ada transaksi baru.'}catch{statusOut.textContent='Pemulihan belum terverifikasi. Jangan membuat checkout baru.'}finally{tokenInput.value='';refresh('plan')}});
+   statusForm.append(copyToken,recover);prep.recover=recover;
+   saved.addEventListener('change',()=>refresh('plan'));
    const reset=()=>{consent.checked=false;price.checked=false;refresh('plan')};
    for(const id of ['ibName','ibPhone','ibEmail'])doc.getElementById(id)?.addEventListener('input',reset);
    consent.addEventListener('change',()=>refresh('plan'));price.addEventListener('change',()=>refresh('plan'));
    submit.addEventListener('click',async()=>{
     const input=view.get(),live=root.JTInteropI5Plan?.();
-    if(!preparationEnabled||prep.busy||!input||!live||!consent.checked||!price.checked)return;
+    if(!preparationEnabled||prep.busy||!input||!live||!consent.checked||!price.checked||!prep.saved.checked||!prep.token)return;
     if(prep.signature!==canonical({scope:input.scope,items:input.items,quote:input.quote,revision:live.quoteRevision??0})){reset();return}
     const customer={name:doc.getElementById('ibName')?.value,phone:doc.getElementById('ibPhone')?.value,email:doc.getElementById('ibEmail')?.value};
     prep.busy=true;submit.disabled=true;
     try{
-     const result=await manager.prepareServer(input,{consent:consent.checked,priceAccepted:price.checked,approvedTotal:input.quote.total,planToken:live.planToken,customer},root.fetch.bind(root),token=>{tokenInput.value=token;orderInput.value=''});
+     const result=await manager.prepareServer(input,{consent:consent.checked,priceAccepted:price.checked,approvedTotal:input.quote.total,planToken:live.planToken,accessToken:prep.token,customer},root.fetch.bind(root),token=>{tokenInput.value=token;orderInput.value=''});
      orderInput.value=result.orderId;out.textContent='Checkout '+result.orderId+' tersimpan. Belum ada booking. Simpan token akses pada kolom status.';
     }catch(e){out.textContent='Persiapan belum dapat diverifikasi. Periksa status atau minta bantuan operator; jangan ulangi jika hasil belum pasti.'}
-    finally{prep.busy=false;consent.checked=false;price.checked=false;refresh('plan')}
+    finally{prep.busy=false;prep.token=null;prep.saved.checked=false;consent.checked=false;price.checked=false;refresh('plan')}
    });
   }else el.append(heading,detail,action,note,statusForm);
   anchor.parentNode.insertBefore(el,anchor);panels.set(view.id,{view,detail,action,prep});
@@ -213,11 +239,11 @@ function mount(){
    const prior=input?manager.get(input.scope):null;
    if(prep){
     const live=root.JTInteropI5Plan?.(),signature=input?canonical({scope:input.scope,items:input.items,quote:input.quote,revision:live?.quoteRevision??0}):null;
-    if(signature!==prep.signature){prep.signature=signature;prep.consent.checked=false;prep.price.checked=false}
+    if(signature!==prep.signature){prep.signature=signature;prep.consent.checked=false;prep.price.checked=false;prep.token=null;prep.saved.checked=false}
     prep.section.hidden=!preparationEnabled;
     prep.amount.textContent=' Saya menyetujui total '+(input?.quote?'Rp '+input.quote.total.toLocaleString('id-ID'):'(belum tersedia)')+' (simulasi).';
     const blocked=!!problem||!input?.quote?.available||!!(prior&&LOCKED.has(prior.state))||prep.busy;
-    prep.consent.disabled=blocked;prep.price.disabled=blocked;prep.submit.disabled=blocked||!prep.consent.checked||!prep.price.checked;
+    prep.consent.disabled=blocked;prep.price.disabled=blocked;prep.makeToken.disabled=blocked;prep.saved.disabled=blocked||!prep.token;prep.recover.disabled=!(prior&&LOCKED.has(prior.state))||prep.busy;prep.submit.disabled=blocked||!prep.consent.checked||!prep.price.checked||!prep.saved.checked||!prep.token;
    }
    if(prior&&LOCKED.has(prior.state)){
     action.disabled=true;detail.textContent=description(prior.state);

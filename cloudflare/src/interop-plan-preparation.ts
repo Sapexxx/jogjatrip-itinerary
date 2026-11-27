@@ -9,7 +9,8 @@ import {createProviderAdapter} from './interop-adapter.ts';
 import type {AdapterPolicy,PreparedOffer} from './interop-adapter.ts';
 import {createInteropJournal,JournalError} from './interop-journal.ts';
 import type {CheckoutIntent} from './interop-journal.ts';
-import {accessToken as newLockToken} from './core.ts';
+import {sha256} from './core.ts';
+import {projectCheckout} from './interop-gateway.ts';
 import type {WorkerEnv,ServiceItem} from './types.ts';
 
 export class PreparationError extends Error {
@@ -30,6 +31,7 @@ function matchSelection(approved:ServiceItem[]|undefined,actual:ServiceItem[]){
 }
 const keyPattern=/^[A-Za-z0-9_-]{16,100}$/;
 const tokenPattern=/^[a-f0-9]{64}$/;
+export const preparationLockFor=async(key:string)=>'I5_'+await sha256(key);
 export function createInteropPlanPreparation(
  env:WorkerEnv,
  fetcher:(url:string,init:RequestInit)=>Promise<Response>,
@@ -37,11 +39,18 @@ export function createInteropPlanPreparation(
 ){
  const journal=createInteropJournal(env.DB);
  return Object.freeze({
+  async recover(planId:string,request:Request,key:string,token:string){
+   if(env.INTEROP_HOLDS!=='true')throw new PreparationError('FEATURE_DISABLED',404);
+   await authorizedPlan(env,planId,request);
+   const prior=await journal.lookupCheckoutByKey(key,token);
+   if(prior.intent.source.kind!=='plan'||prior.intent.source.id!==planId)throw new JournalError('NOT_FOUND',404);
+   return projectCheckout(await journal.readJournal(prior.orderId,token));
+  },
   async prepare(planId:string,request:Request,input:PreparedInput){
    if(env.INTEROP_HOLDS!=='true')throw new PreparationError('FEATURE_DISABLED',404);
    // Owner authentication precedes any lookup, provider request or mutation.
    const owner=await authorizedPlan(env,planId,request);
-   if(!input||!keyPattern.test(input.key)||!tokenPattern.test(input.accessToken)||
+   if(!input||typeof input.key!=='string'||typeof input.accessToken!=='string'||!keyPattern.test(input.key)||!tokenPattern.test(input.accessToken)||
       input.consent!==true||!Number.isSafeInteger(input.approvedTotal)||input.approvedTotal<0||!input.customer||typeof input.customer!=='object')
     throw new PreparationError('INVALID_CHECKOUT_INPUT',400);
    // Original key/token lets the owner recover an ID after a lost HTTP response,
@@ -61,6 +70,7 @@ export function createInteropPlanPreparation(
        (original.email??undefined)!==(input.customer.email??undefined)||
        prior.intent.items.reduce((sum,i)=>sum+i.expectedTotal,0)!==input.approvedTotal)
      throw new PreparationError('IDEMPOTENCY_CONFLICT',409);
+    if((await journal.readJournal(prior.orderId,input.accessToken)).operations.length)throw new PreparationError('CHECKOUT_ALREADY_STARTED',409);
     return {orderId:prior.orderId,created:false,state:'NOT_STARTED' as const,bookingPerformed:false};
    }
    if(owner.orderLock)throw new PreparationError('PLAN_LOCKED',409);
@@ -69,9 +79,9 @@ export function createInteropPlanPreparation(
    if(typeof trustedPolicy.verifySelection!=='function')
     throw new PreparationError('TRUSTED_SELECTION_VERIFIER_REQUIRED',503);
    if(typeof fetcher!=='function')throw new PreparationError('FETCHER_NOT_CONFIGURED',503);
-   const lock='I5_'+newLockToken();
+   const lock=await preparationLockFor(input.key);
    await claimPlan(env,planId,lock);
-   let persisted=false;
+   let persisted=false,writeAttempted=false;
    try{
     // Reload after SQL claim. The UI might have edited the plan between auth and lock.
     const plan=await authorizedPlan(env,planId,request);
@@ -106,11 +116,13 @@ export function createInteropPlanPreparation(
      source:{kind:'plan',id:planId},customer:input.customer,consent:true,
      items:items.map((item,i)=>({item,expectedTotal:offers[i].totalPrice}))
     };
+    // A lost D1 acknowledgement cannot prove the INSERT did not commit.
+    writeAttempted=true;
     const saved=await journal.reserveCheckout(input.key,input.accessToken,intent,offers);
     persisted=true; // Keep source locked against edits and legacy double booking.
     return {orderId:saved.checkout.orderId,created:saved.created,state:'NOT_STARTED' as const,bookingPerformed:false};
    }finally{
-    if(!persisted)await releasePlan(env,planId,lock);
+    if(!persisted&&!writeAttempted)await releasePlan(env,planId,lock);
    }
   }
  });

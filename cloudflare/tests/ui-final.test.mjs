@@ -73,3 +73,16 @@ test('I5 consent: lost response locks preparation across reload with no automati
  assert.equal(make(store,webcrypto).get(input.scope).state,'UNKNOWN');
  await assert.rejects(make(store,webcrypto).prepareServer(input,approval,fetcher),/CHECKOUT_STATE_LOCKED/);assert.equal(calls,1);
 });
+
+test('I5 token recovery: original key and separately saved token recover lost prepare reply by GET only',async()=>{
+ const values=new Map(),store={getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)};
+ const make=globalThis.JTInteropI5.createDraftManager,m=make(store,webcrypto),token=m.createToken();
+ const input={scope:'plan:RECOVERY-1',items:[{type:'transport',vehicleId:'R-01'}],quote:{total:10000,available:true,items:[{amount:10000}]}};
+ const approval={consent:true,priceAccepted:true,approvedTotal:10000,planToken:'a'.repeat(48),accessToken:token,customer:{name:'Synthetic User',phone:'081234567890',email:'test@example.test'}};
+ let key;await assert.rejects(m.prepareServer(input,approval,async(url,init)=>{const b=JSON.parse(init.body);key=b.key;assert.equal(b.accessToken,token);throw Error('lost reply')}));
+ const reloaded=make(store,webcrypto),id='JT-'+'c'.repeat(32);
+ assert.equal(reloaded.get(input.scope).state,'UNKNOWN');let calls=0;
+ const data=await reloaded.recoverServer(input.scope,approval.planToken,token,async(url,init)=>{calls++;assert.equal(url,'/api/interop/itineraries/RECOVERY-1/prepare');assert.equal(init.method,'GET');assert.equal(init.headers['X-Checkout-Key'],key);assert.equal(init.headers['X-Interop-Token'],token);assert.equal(init.body,undefined);return new Response(JSON.stringify({orderId:id,status:'NOT_STARTED',verifiedBy:'D1_JOURNAL',paymentVerified:false,bookingsAtomic:false}))});
+ assert.equal(data.orderId,id);assert.equal(reloaded.get(input.scope).state,'PREPARED');assert.equal(calls,1);assert.ok(![...values.values()].join('').includes(token));
+ await assert.rejects(reloaded.prepareServer(input,approval,()=>{throw Error('no POST')}),/CHECKOUT_STATE_LOCKED/);
+});
