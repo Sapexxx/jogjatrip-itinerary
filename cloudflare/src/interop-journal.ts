@@ -76,7 +76,7 @@ function normalizeOffers(intent:CheckoutIntent,offers:readonly PreparedOffer[]|u
   const x=intent.items[i],m=itemToOfferQuery(x.item),period=o.period;
   demand(o.provider===m.provider&&o.entityType===m.entityType&&o.currency==='IDR'&&o.quantity===m.query.quantity&&period?.startDate===m.query.startDate&&period?.endDate===(m.query.endDate??m.query.startDate),'OFFER_MISMATCH',409);
   demand(o.totalPrice===x.expectedTotal,'PRICE_CHANGED',409);
-  return {provider:o.provider,entityType:o.entityType,resourceId:text(o.resourceId),offerId:text(o.offerId,400),quantity:int(o.quantity,1),period:{startDate:period.startDate,endDate:period.endDate},totalPrice:int(o.totalPrice),currency:'IDR',generatedAt:utc(o.generatedAt)};
+  return {provider:o.provider,entityType:o.entityType,resourceId:text(o.resourceId),offerId:text(o.offerId,400),quantity:int(o.quantity,1),period:{startDate:period.startDate,endDate:period.endDate},totalPrice:int(o.totalPrice),currency:'IDR',generatedAt:utc(o.generatedAt),...(o.expiresAt===undefined?{}:{expiresAt:utc(o.expiresAt)})};
  });
 }
 function rowCheckout(row:any):CheckoutRecord{return {orderId:row.order_id,externalRef:row.order_id,mode:row.execution_mode,intent:JSON.parse(row.intent_json),offers:JSON.parse(row.offers_json),createdAt:row.created_at}}

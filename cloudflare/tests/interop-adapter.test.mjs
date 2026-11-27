@@ -132,3 +132,8 @@ test('final contract: quantity above advertised max blocks before offers; transp
  const x=make({},proof);assert.equal((await x.adapter.prepareCheckout(req([transport]))).preflightComplete,true);
  assert.equal(new URL(x.calls.find(c=>c.url.includes('/offers?')).url).searchParams.get('withDriver'),'true');
 });
+
+test('expired offer cannot enter checkout even with authoritative selection proof',async()=>{
+ const {adapter,calls}=make({}, {...proof,now:()=>Date.parse('2026-12-01T03:05:01Z')});
+ const r=await adapter.prepareCheckout(req([transport]));assert.equal(r.preflightComplete,false);assert.equal(r.offers[0].reason,'OFFER_EXPIRED');assert.ok(calls.every(c=>c.method==='GET'));
+});

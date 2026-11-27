@@ -17,6 +17,8 @@ jobs:
       - name: Install pinned Worker dependencies
         working-directory: cloudflare
         run: npm ci --no-audit --no-fund
+      - name: Verify canonical source manifest
+        run: node tools/check-source-manifest.mjs
       - name: Run entire Worker test suite
         working-directory: cloudflare
         run: npm test

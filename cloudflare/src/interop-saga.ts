@@ -61,8 +61,13 @@ export function createHoldSaga(journal:Journal,clients:Clients,options:{now?:()=
    // Resolve all trusted clients before creating any intent or external mutation.
    checkout.offers.forEach(o=>client(o.provider));
    const held:{index:number;provider:ProviderKind;holdId:string}[]=[];
+   // Refuse stale offers before issuing any provider mutation.
+   const fresh=(o:typeof checkout.offers[number])=>Math.min(Date.parse(o.generatedAt)+300000,o.expiresAt===undefined?Infinity:Date.parse(o.expiresAt))>now();
+   if(!checkout.offers.every(fresh))return result(orderId,'BLOCKED','OFFER_EXPIRED',0,total);
    for(let i=0;i<total;i++){
-    const o=checkout.offers[i],started=await journal.beginOperation(proof,i,'HOLD');
+    const o=checkout.offers[i];
+    if(!fresh(o)){const compensated=await releaseSaved(proof,held);return result(orderId,compensated?'COMPENSATED':'UNKNOWN','OFFER_EXPIRED_DURING_HOLD',done,total)}
+    const started=await journal.beginOperation(proof,i,'HOLD');
     if(!started.created)return result(orderId,'BLOCKED','OPERATION_ALREADY_EXISTS',done,total);
     const request=await journal.getOperationRequest(proof,i,'HOLD');
     if(!request.body)throw Error('Missing immutable hold body');

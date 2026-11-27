@@ -30,10 +30,10 @@ export interface PreflightRequest {
  mutationStarted?:boolean;
 }
 export interface ItemQuery {provider:ProviderKind;entityType:InteropEntity;query:OfferQuery}
-export type OfferFailure='IDENTITY_UNVERIFIED'|'OFFER_NOT_FOUND'|'OFFER_UNAVAILABLE'|'SELECTION_UNVERIFIED'|'AMBIGUOUS_OFFER'|'OFFER_REQUEST_FAILED'|'INVALID_ITEMS';
+export type OfferFailure='IDENTITY_UNVERIFIED'|'OFFER_NOT_FOUND'|'OFFER_UNAVAILABLE'|'SELECTION_UNVERIFIED'|'AMBIGUOUS_OFFER'|'OFFER_REQUEST_FAILED'|'INVALID_ITEMS'|'OFFER_EXPIRED';
 export interface PreparedOffer {
  provider:ProviderKind;entityType:InteropEntity;resourceId:string;offerId:string;
- quantity:number;period:{startDate:string;endDate:string};totalPrice:number;currency:'IDR';generatedAt:string;
+ quantity:number;period:{startDate:string;endDate:string};totalPrice:number;currency:'IDR';generatedAt:string;expiresAt?:string;
 }
 export type OfferResult={ok:true;offer:PreparedOffer}|{ok:false;reason:OfferFailure;httpStatus?:number};
 export type PreparedCheckout={decision:ModeDecision;offers:OfferResult[];preflightComplete:boolean;bookingEnabled:boolean};
@@ -51,6 +51,7 @@ export interface AdapterPolicy {
   */
  verifySelection?:(item:Readonly<ServiceItem>,offer:Readonly<CanonicalOffer>)=>boolean;
  capabilitiesTimeoutMs?:number;
+ now?:()=>number;
 }
 const validKind=(x:unknown):x is ProviderKind=>typeof x==='string'&&Object.hasOwn(bindings,x);
 function configuredOrigin(value:unknown):boolean{
@@ -170,8 +171,10 @@ export function createProviderAdapter(env:Config,fetcher:Fetcher,policy:AdapterP
   if(!verified.length)return {ok:false,reason:'SELECTION_UNVERIFIED'};
   if(verified.length!==1)return {ok:false,reason:'AMBIGUOUS_OFFER'};
   const o=verified[0];
+  const deadline=Math.min(Date.parse(response.generatedAt)+300000,o.expiresAt===undefined?Infinity:Date.parse(o.expiresAt));
+  if(!Number.isFinite(deadline)||deadline<=(opts.now??Date.now)())return {ok:false,reason:'OFFER_EXPIRED'};
   return {ok:true,offer:{provider:o.provider,entityType:o.entityType,resourceId:o.resourceId,offerId:o.offerId,
-   quantity:mapped.query.quantity!,period:{...o.period},totalPrice:o.totalPrice,currency:o.currency,generatedAt:response.generatedAt}};
+   quantity:mapped.query.quantity!,period:{...o.period},totalPrice:o.totalPrice,currency:o.currency,generatedAt:response.generatedAt,expiresAt:new Date(deadline).toISOString()}};
  }
  async function prepareCheckout(request:PreflightRequest):Promise<PreparedCheckout>{
   // Copy before any await; a mutable caller object cannot change choices mid-preflight.

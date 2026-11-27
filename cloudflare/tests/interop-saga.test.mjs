@@ -283,3 +283,8 @@ test('E9 reconciliation does not invent missing payment state',async t=>{
  const lock=await f.db.prepare('SELECT fence FROM jt_order_locks WHERE order_id=?').bind(f.id).first();f.advance(1001);
  assert.equal((await saga.reconcile(f.id,f.token,lock.fence,true)).status,'UNKNOWN');assert.equal((await operations(f)).find(o=>o.operation==='CONFIRM').state,'UNKNOWN');assert.equal(a.calls.confirm,1);assert.equal(a.calls.release,0);
 });
+
+test('expired prepared offer blocks all HOLDs before provider mutation',async t=>{
+ const f=await fixture(t),a=fake('transport');f.advance(301000);
+ const r=await run(f,{transport:a.client}).hold(f.id,f.token);assert.equal(r.status,'BLOCKED');assert.equal(r.reason,'OFFER_EXPIRED');assert.equal(a.calls.hold,0);assert.equal((await operations(f)).length,0);
+});
