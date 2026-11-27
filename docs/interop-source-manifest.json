@@ -1,0 +1,26 @@
+{
+  "zip": "jogjatrip-interop-itinerary.zip",
+  "sha256": "3ba652ee06d699f237c07b00c27d864ce1eb1c1545de52baf9dded2a923dcd91",
+  "gitBlobSha1": {
+    "BACA_DULU.md": "340856ba38a0280ad1d134fbf37df3cd33505913",
+    "PR_ITINERARY.md": "fafe45aa7ee2442146a8b2fd9c483090ca2c8336",
+    "interop-contract.yaml": "69459891fbc8dce073bc804f982a20149e857094",
+    "tools/package-lock.json": "b7a76098e185e32b49f05420ebacb7f3bec96c25",
+    "tools/package.json": "9223d8d0d886256b37e2148ac31695b4bde26129",
+    "tools/interop-contract-check.mjs": "cbb64bdc62c731c2058f2123e11ec0a33081af46",
+    "00_URUTAN_DAN_ATURAN.md": "24dc4f6f90be343f7f31703f51bcace6a4d374ee",
+    "json-schema/handoff-context.schema.json": "3e95df9e779c4f34978aa25132d5c8445596611b",
+    "json-schema/capabilities.schema.json": "891574d8eeba212908fb97ee360153022095529f",
+    "json-schema/hold-response.schema.json": "60b0f56eb1645b9def5eaac9912935b3e620566d",
+    "json-schema/error.schema.json": "95a41c59d1db1d3df1959605bc3ec05c60fb3500",
+    "json-schema/offers-response.schema.json": "75c9c05d1c124491475b1068bc7ba059a8d48833",
+    "json-schema/hold-request.schema.json": "b3ddf0d10240ebf19bac633b49484f37a9f8c910",
+    "json-schema/offer.schema.json": "380f9f18b10a9fa24ef88bb4d04785e6e16015e7",
+    "docs/sequence-addon-checkout.mmd": "54e3d6df0f67608e855cfc7617ec809d8d505206",
+    "docs/integration-guide.md": "a6926555f80754a99d2e2d78d6c9ad2953f9f543",
+    "docs/test-scenarios.md": "d7aba4efcc4e42598e6c48cc0a2fbbfc3cdffd70",
+    "docs/data-flow-diagram.mmd": "725999dcb26509588307d6d563aae465e26bc153",
+    "docs/sequence-itinerary-saga.mmd": "8ee621d8eac430dad7663a03bb8650c4762b2c5f",
+    "patches/jogjatrip-0001-definite-error-codes.patch": "76a1ea234b3f0e6cb9ddc07f67467e469fa1ae2e"
+  }
+}
