@@ -5,6 +5,7 @@
     const response = await fetch('/api/health', { cache: 'no-store' });
     if (!response.ok) return;
     const health = await response.json();
+    window.JTInteropI5Mounted?.setPreparationEnabled(health.interopPreparationEnabled===true);
     if (health.bookingEnabled !== false) return;
 
     document.addEventListener('click', (event) => {

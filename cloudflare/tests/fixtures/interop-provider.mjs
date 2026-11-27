@@ -17,7 +17,7 @@ export function mockProvider(provider='transport',capacity=2){
   calls.push({path:u.pathname,search:u.search,method:init.method,headers,body,redirect:init.redirect});
   if(!['Bearer '+TOKEN,'Bearer '+OTHER].includes(token))return error(401,'UNAUTHORIZED');
   const p=u.pathname.replace('/api/v1/interop','');
-  if(p==='/capabilities'&&init.method==='GET')return json({contract:'0.2.0',provider,entityTypes:[kinds[provider]],holds:true,holdTtlMinutes:15,durableStorage:true,location:'region'});
+  if(p==='/capabilities'&&init.method==='GET')return json({contract:'0.2.0',provider,entityTypes:[kinds[provider]],holds:true,holdTtlMinutes:15,durableStorage:true,location:'region',maxQuantity:capacity});
   if(p==='/offers'&&init.method==='GET'){
    const startDate=u.searchParams.get('startDate'),endDate=provider==='wisata'?startDate:u.searchParams.get('endDate'),quantity=Number(u.searchParams.get('quantity')||1);
    const count=remaining(),offerId='opaque-fixture-'+(++seq),totalPrice=10000*quantity;

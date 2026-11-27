@@ -13,7 +13,7 @@ const bindings={
  wisata:{url:'WISATA_API_URL',token:'WISATA_PARTNER_TOKEN',entity:'tourist_attraction'},
  transport:{url:'TRANSPORT_API_URL',token:'TRANSPORT_PARTNER_TOKEN',entity:'vehicle_rental'}
 } as const;
-export type CapabilityReason='READY'|'FEATURE_DISABLED'|'MISSING_CONFIGURATION'|'MISSING_TOKEN'|'AUTH_FAILED'|'UNSUPPORTED_ENDPOINT'|'INVALID_CAPABILITIES'|'PROVIDER_UNAVAILABLE'|'HOLDS_UNSUPPORTED'|'DURABILITY_UNVERIFIED'|'ENTITY_UNSUPPORTED'|'INVALID_TTL';
+export type CapabilityReason='READY'|'FEATURE_DISABLED'|'MISSING_CONFIGURATION'|'MISSING_TOKEN'|'AUTH_FAILED'|'UNSUPPORTED_ENDPOINT'|'INVALID_CAPABILITIES'|'PROVIDER_UNAVAILABLE'|'HOLDS_UNSUPPORTED'|'DURABILITY_UNVERIFIED'|'ENTITY_UNSUPPORTED'|'INVALID_TTL'|'QUANTITY_UNSUPPORTED';
 export interface CapabilityResult {
  provider:ProviderKind; eligible:boolean; reason:CapabilityReason;
  capabilities?:Capabilities; httpStatus?:number;
@@ -30,10 +30,10 @@ export interface PreflightRequest {
  mutationStarted?:boolean;
 }
 export interface ItemQuery {provider:ProviderKind;entityType:InteropEntity;query:OfferQuery}
-export type OfferFailure='IDENTITY_UNVERIFIED'|'OFFER_NOT_FOUND'|'OFFER_UNAVAILABLE'|'SELECTION_UNVERIFIED'|'AMBIGUOUS_OFFER'|'OFFER_REQUEST_FAILED'|'INVALID_ITEMS';
+export type OfferFailure='IDENTITY_UNVERIFIED'|'OFFER_NOT_FOUND'|'OFFER_UNAVAILABLE'|'SELECTION_UNVERIFIED'|'AMBIGUOUS_OFFER'|'OFFER_REQUEST_FAILED'|'INVALID_ITEMS'|'OFFER_EXPIRED';
 export interface PreparedOffer {
  provider:ProviderKind;entityType:InteropEntity;resourceId:string;offerId:string;
- quantity:number;period:{startDate:string;endDate:string};totalPrice:number;currency:'IDR';generatedAt:string;
+ quantity:number;period:{startDate:string;endDate:string};totalPrice:number;currency:'IDR';generatedAt:string;expiresAt?:string;
 }
 export type OfferResult={ok:true;offer:PreparedOffer}|{ok:false;reason:OfferFailure;httpStatus?:number};
 export type PreparedCheckout={decision:ModeDecision;offers:OfferResult[];preflightComplete:boolean;bookingEnabled:boolean};
@@ -47,10 +47,11 @@ export interface AdapterPolicy {
  resolveResourceId?:(item:Readonly<ServiceItem>)=>string|undefined;
  /** Trusted verification of material choices (room + guest capacity, ticket tier, driver option).
   * Must use authoritative provider evidence, not display-only attributes or a user assertion.
-  * No production verifier exists in I2; absent/false/throw always blocks.
+  * A trusted verifier may use independent provider GET evidence. Absent/false/throw blocks.
   */
- verifySelection?:(item:Readonly<ServiceItem>,offer:Readonly<CanonicalOffer>)=>boolean;
+ verifySelection?:(item:Readonly<ServiceItem>,offer:Readonly<CanonicalOffer>)=>boolean|Promise<boolean>;
  capabilitiesTimeoutMs?:number;
+ now?:()=>number;
 }
 const validKind=(x:unknown):x is ProviderKind=>typeof x==='string'&&Object.hasOwn(bindings,x);
 function configuredOrigin(value:unknown):boolean{
@@ -76,7 +77,7 @@ export function itemToOfferQuery(input:ServiceItem):ItemQuery{
  const item=validatedItem(input);
  if(item.type==='hotel')return {provider:'hotel',entityType:'lodging',query:{startDate:item.checkIn,endDate:item.checkOut,quantity:1,limit:20}};
  if(item.type==='wisata')return {provider:'wisata',entityType:'tourist_attraction',query:{startDate:item.visitDate,quantity:item.quantity,limit:20}};
- return {provider:'transport',entityType:'vehicle_rental',query:{startDate:item.startDate,endDate:item.endDate,quantity:1,limit:20}};
+ return {provider:'transport',entityType:'vehicle_rental',query:{startDate:item.startDate,endDate:item.endDate,quantity:1,limit:20,withDriver:item.withDriver}};
 }
 function snapshotItems(input:readonly ServiceItem[]):ServiceItem[]{
  if(!Array.isArray(input)||input.length===0||input.length>5)throw Error('invalid items');
@@ -134,7 +135,13 @@ export function createProviderAdapter(env:Config,fetcher:Fetcher,policy:AdapterP
   if(!enabled)return decision('BLOCKED','FEATURE_DISABLED');
   // Shared externalRef can currently conflict per provider. No silent truncation or split.
   if(required.length!==items.length)return decision('BLOCKED','DUPLICATE_PROVIDER');
-  const caps=await Promise.all(required.map(detect));
+  const caps=await Promise.all(required.map(async kind=>{
+   const c=await detect(kind);
+   const item=items.find(i=>i.type===kind)!;
+   if(c.eligible&&c.capabilities&&itemToOfferQuery(item).query.quantity!>c.capabilities.maxQuantity)
+    return failure(kind,'QUANTITY_UNSUPPORTED',c.capabilities);
+   return c;
+  }));
   return caps.every(c=>c.eligible)?decision('CONTRACT_0_2','CAPABILITIES_READY',caps):decision('BLOCKED','PROVIDER_NOT_READY',caps);
  }
  async function prepareOffer(item:ServiceItem):Promise<OfferResult>{
@@ -158,14 +165,16 @@ export function createProviderAdapter(env:Config,fetcher:Fetcher,policy:AdapterP
   for(const offer of available){
    try{
     const copy=structuredClone(offer);
-    if(opts.verifySelection(Object.freeze({...item}),Object.freeze(copy))===true)verified.push(offer);
+    if(await opts.verifySelection(Object.freeze({...item}),Object.freeze(copy))===true)verified.push(offer);
    }catch{return {ok:false,reason:'SELECTION_UNVERIFIED'}}
   }
   if(!verified.length)return {ok:false,reason:'SELECTION_UNVERIFIED'};
   if(verified.length!==1)return {ok:false,reason:'AMBIGUOUS_OFFER'};
   const o=verified[0];
+  const deadline=Math.min(Date.parse(response.generatedAt)+300000,o.expiresAt===undefined?Infinity:Date.parse(o.expiresAt));
+  if(!Number.isFinite(deadline)||deadline<=(opts.now??Date.now)())return {ok:false,reason:'OFFER_EXPIRED'};
   return {ok:true,offer:{provider:o.provider,entityType:o.entityType,resourceId:o.resourceId,offerId:o.offerId,
-   quantity:mapped.query.quantity!,period:{...o.period},totalPrice:o.totalPrice,currency:o.currency,generatedAt:response.generatedAt}};
+   quantity:mapped.query.quantity!,period:{...o.period},totalPrice:o.totalPrice,currency:o.currency,generatedAt:response.generatedAt,expiresAt:new Date(deadline).toISOString()}};
  }
  async function prepareCheckout(request:PreflightRequest):Promise<PreparedCheckout>{
   // Copy before any await; a mutable caller object cannot change choices mid-preflight.

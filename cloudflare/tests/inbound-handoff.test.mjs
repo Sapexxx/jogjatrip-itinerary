@@ -61,3 +61,12 @@ test('final PR: Transport handoff validates vehicle or vehicleId and rental rang
  assert.equal(parsePartner('?from=jogjatrans&from=jogjatrans&vehicleId=R-01'),null);
  assert.equal(parsePartner('?from=wisata&vehicleId=R-01'),null);
 });
+
+test('official handoff accepts exact 60-character IDs and explicit boolean driver context',()=>{
+ assert.equal(parsePartner('?from=jogjatrans&vehicleId=R-01&withDriver=true').withDriver,true);
+ assert.equal(parsePartner('?from=jogjatrans&vehicleId=R-01&withDriver=false').withDriver,false);
+ assert.equal(parsePartner('?from=jogjatrans&vehicleId=R-01&withDriver=1').withDriver,undefined);
+ assert.equal(parsePartner('?from=jogjatrans&vehicleId=R-01&withDriver=true&withDriver=false').withDriver,undefined);
+ assert.equal(parsePartner('?from=jogjastay&hotelId='+'a'.repeat(60)).id,'a'.repeat(60));
+ assert.equal(parsePartner('?from=jogjastay&hotelId='+'a'.repeat(61)).id,null);
+});

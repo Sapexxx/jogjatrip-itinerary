@@ -19,7 +19,7 @@ export interface SagaResult {
 /** Client I1 classifies documented HTTP-status/code pairs; never reclassify
  * unknown remote mutations or idempotency conflicts in the saga. */
 function verifiedReject(e:unknown):e is InteropError {
- return e instanceof InteropError&&!e.outcomeUnknown;
+ return e instanceof InteropError&&!e.outcomeUnknown&&e.code!=='ALREADY_CONFIRMED';
 }
 
 function codeOf(e:unknown){return e instanceof InteropError?e.code:'UPSTREAM_HTTP_ERROR'}
@@ -61,8 +61,13 @@ export function createHoldSaga(journal:Journal,clients:Clients,options:{now?:()=
    // Resolve all trusted clients before creating any intent or external mutation.
    checkout.offers.forEach(o=>client(o.provider));
    const held:{index:number;provider:ProviderKind;holdId:string}[]=[];
+   // Refuse stale offers before issuing any provider mutation.
+   const fresh=(o:typeof checkout.offers[number])=>Math.min(Date.parse(o.generatedAt)+300000,o.expiresAt===undefined?Infinity:Date.parse(o.expiresAt))>now();
+   if(!checkout.offers.every(fresh))return result(orderId,'BLOCKED','OFFER_EXPIRED',0,total);
    for(let i=0;i<total;i++){
-    const o=checkout.offers[i],started=await journal.beginOperation(proof,i,'HOLD');
+    const o=checkout.offers[i];
+    if(!fresh(o)){const compensated=await releaseSaved(proof,held);return result(orderId,compensated?'COMPENSATED':'UNKNOWN','OFFER_EXPIRED_DURING_HOLD',done,total)}
+    const started=await journal.beginOperation(proof,i,'HOLD');
     if(!started.created)return result(orderId,'BLOCKED','OPERATION_ALREADY_EXISTS',done,total);
     const request=await journal.getOperationRequest(proof,i,'HOLD');
     if(!request.body)throw Error('Missing immutable hold body');
@@ -151,10 +156,11 @@ export function createHoldSaga(journal:Journal,clients:Clients,options:{now?:()=
     const request=await journal.getOperationRequest(proof,op.itemIndex,op.operation);
     try{
      const snapshot=await client(op.provider).getHold(op.holdId);
-     if(snapshot.holdId!==op.holdId)continue;
-     if(op.operation==='CONFIRM'&&snapshot.reservationState==='reserved'&&snapshot.voucher){
+     const offer=view.checkout.offers[op.itemIndex];
+     if(snapshot.holdId!==op.holdId||snapshot.externalRef!==view.checkout.externalRef||snapshot.offerId!==offer.offerId||snapshot.currency!=='IDR'||snapshot.totalPrice!==offer.totalPrice)continue;
+     if(op.operation==='CONFIRM'&&snapshot.reservationState==='reserved'&&snapshot.voucher&&snapshot.paymentState!==undefined){
       await journal.recordOutcome(proof,op.itemIndex,'CONFIRM',request.operation.revision,
-       {state:'SUCCEEDED',result:{holdId:op.holdId,reservationState:'reserved',paymentState:snapshot.paymentState??'unpaid',voucher:snapshot.voucher}});
+       {state:'SUCCEEDED',result:{holdId:op.holdId,reservationState:'reserved',paymentState:snapshot.paymentState,voucher:snapshot.voucher}});
       done++;
      }else if(op.operation==='RELEASE'&&snapshot.reservationState==='cancelled'){
       await journal.recordOutcome(proof,op.itemIndex,'RELEASE',request.operation.revision,

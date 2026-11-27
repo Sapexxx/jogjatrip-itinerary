@@ -8,21 +8,25 @@ import vocabulary from '../crs-vocabulary.json' with { type: 'json' };
 export type InteropEntity = 'lodging' | 'tourist_attraction' | 'vehicle_rental';
 export type HoldState = 'awaiting_payment' | 'reserved' | 'cancelled' | 'expired';
 export type PaymentState = 'unpaid' | 'paid' | 'refunded' | 'partially_refunded' | 'expired' | 'not_applicable';
+export type CustomerField='name'|'phone'|'email';
 export interface Capabilities {
  contract: '0.2.0'; provider: ProviderKind; entityTypes: string[]; holds: boolean;
  holdTtlMinutes: number; durableStorage: boolean; location: 'point'|'region';
+ requiredCustomerFields: CustomerField[]; optionalCustomerFields: CustomerField[]; maxQuantity:number;
+ paymentSupported?:boolean; paymentMode?:'none'|'simulated';
 }
 export interface OfferQuery {
  startDate: string; endDate?: string; regionId?: string; lat?: number; lng?: number;
- radiusKm?: number; quantity?: number; limit?: number;
+ radiusKm?: number; quantity?: number; limit?: number; withDriver?:boolean;
 }
 export interface CanonicalOffer {
  offerId: string; provider: ProviderKind; entityType: InteropEntity; resourceId: string;
  regionId: string|null; name: string; description: string; imageUrl: string|null;
- price: number|null; priceUnit: 'night'|'ticket'|'day'|'trip'|'person'; currency: 'IDR';
+ price: number; priceUnit: 'night'|'ticket'|'day'|'trip'|'person'; currency: 'IDR';
  period: {startDate: string; endDate: string}; totalPrice: number;
  available: boolean; remaining: number; location: {lat: number|null; lng: number|null}|null;
  attributes: Record<string,unknown>;
+ expiresAt?:string; quantity?:number; priceType?:'SIMULATED'; simulation?:true;
 }
 export interface Offers {provider: ProviderKind; generatedAt: string; offers: CanonicalOffer[]}
 export interface HoldRequest {
@@ -38,7 +42,7 @@ export interface HoldConfirmed {holdId:string; reservationState:'reserved'; paym
 export interface HoldReleased {holdId:string; reservationState:'cancelled'}
 export interface HoldSnapshot {
  holdId:string; reservationState:HoldState; paymentState?:PaymentState; voucher?:Voucher;
- expiresAt?:string; externalRef?:string; offerId?:string; totalPrice?:number; currency?:'IDR';
+ expiresAt:string|null; externalRef:string; offerId:string; totalPrice:number; currency:'IDR';
 }
 type Fetcher = (url:string, init:RequestInit)=>Promise<Response>;
 export interface InteropConfig {
@@ -97,46 +101,67 @@ function queryParams(entity:InteropEntity,input:OfferQuery):URLSearchParams{
  if(o.lat!==undefined)p.set('lat',String(number(o.lat,-90,90)));
  if(o.lng!==undefined)p.set('lng',String(number(o.lng,-180,180)));
  if(o.radiusKm!==undefined)p.set('radiusKm',String(number(o.radiusKm,Number.MIN_VALUE,Number.MAX_VALUE)));
+ if(o.withDriver!==undefined){requireShape(entity==='vehicle_rental');p.set('withDriver',String(bool(o.withDriver)))}
  p.set('quantity',String(o.quantity===undefined?1:integer(o.quantity,1)));
  p.set('limit',String(o.limit===undefined?20:integer(o.limit,1,20)));
  return p;
 }
 function parseCapabilities(x:unknown,provider:ProviderKind):Capabilities{
- const o=record(x);requireShape(o.contract==='0.2.0'&&o.provider===provider&&Array.isArray(o.entityTypes));
- return {contract:'0.2.0',provider,entityTypes:(o.entityTypes as unknown[]).map(v=>str(v)),holds:bool(o.holds),
- holdTtlMinutes:integer(o.holdTtlMinutes,0),durableStorage:bool(o.durableStorage),location:oneOf<'point'|'region'>(o.location,new Set(['point','region']))};
+ const o=record(x);requireShape(o.contract==='0.2.0'&&o.provider===provider&&Array.isArray(o.entityTypes)&&o.entityTypes.length>0);
+ const fields=new Set(['name','phone','email']);
+ function customerFields(value:unknown,fallback:CustomerField[]):CustomerField[]{
+  if(value===undefined)return fallback;
+  requireShape(Array.isArray(value));
+  return [...new Set(value.map(v=>oneOf<CustomerField>(v,fields)))];
+ }
+ return {contract:'0.2.0',provider,entityTypes:(o.entityTypes as unknown[]).map(v=>oneOf<InteropEntity>(v,new Set(Object.values(entityByProvider)))),holds:bool(o.holds),
+ holdTtlMinutes:integer(o.holdTtlMinutes,1),durableStorage:bool(o.durableStorage),location:oneOf<'point'|'region'>(o.location,new Set(['point','region'])),
+ requiredCustomerFields:customerFields(o.requiredCustomerFields,['name','phone']),optionalCustomerFields:customerFields(o.optionalCustomerFields,[]),
+ maxQuantity:o.maxQuantity===undefined?1:integer(o.maxQuantity,1),
+ ...(o.paymentSupported===undefined?{}:{paymentSupported:bool(o.paymentSupported)}),
+ ...(o.paymentMode===undefined?{}:{paymentMode:oneOf<'none'|'simulated'>(o.paymentMode,new Set(['none','simulated']))})};
 }
 function parseOffers(x:unknown,provider:ProviderKind,query:URLSearchParams):Offers{
  const o=record(x),entity=entityByProvider[provider];
  requireShape(o.provider===provider&&Array.isArray(o.offers)&&o.offers.length<=Number(query.get('limit')));
  const offers=(o.offers as unknown[]).map((v):CanonicalOffer=>{
   const a=record(v);requireShape(a.provider===provider&&a.entityType===entity);
-  const p=record(a.period),start=date(p.startDate),end=date(p.endDate);
+  const p=record(a.period),start=date(p.startDate),end=entity==='tourist_attraction'&&(p.endDate===null||p.endDate===undefined)?start:date(p.endDate);
   validPeriod(entity,start,end);requireShape(start===query.get('startDate')&&(entity==='tourist_attraction'||end===query.get('endDate')));
   const region=a.regionId===null?null:str(a.regionId);requireShape(region===null?entity==='vehicle_rental':regions.has(region));
   const image=a.imageUrl===null?null:str(a.imageUrl);if(image!==null){const u=new URL(image);requireShape(u.protocol==='https:'&&!u.username&&!u.password)}
-  const loc=a.location===null?null:record(a.location);
-  const location=loc===null?null:{lat:loc.lat===null?null:number(loc.lat,-90,90),lng:loc.lng===null?null:number(loc.lng,-180,180)};
+  const loc=record(a.location);
+  const location={lat:loc.lat===null?null:number(loc.lat,-90,90),lng:loc.lng===null?null:number(loc.lng,-180,180)};
   const available=bool(a.available),remaining=integer(a.remaining);
   requireShape(!available||remaining>=Number(query.get('quantity')));
-  return {offerId:str(a.offerId),provider,entityType:entity,resourceId:str(a.resourceId),regionId:region,
-   name:str(a.name),description:str(a.description,true),imageUrl:image,price:a.price===null?null:integer(a.price),
+  const offerId=str(a.offerId);requireShape(offerId.length<=400);
+  if(a.quantity!==undefined)requireShape(integer(a.quantity,1)===Number(query.get('quantity')));
+  if(a.priceType!==undefined)requireShape(a.priceType==='SIMULATED');
+  if(a.simulation!==undefined)requireShape(a.simulation===true);
+  return {offerId,provider,entityType:entity,resourceId:str(a.resourceId),regionId:region,
+   name:str(a.name),description:str(a.description,true),imageUrl:image,price:integer(a.price),
    priceUnit:oneOf<CanonicalOffer['priceUnit']>(a.priceUnit,priceUnits),currency:idr(a.currency),
-   period:{startDate:start,endDate:end},totalPrice:integer(a.totalPrice),available,remaining,location,attributes:record(a.attributes)};
+   period:{startDate:start,endDate:end},totalPrice:integer(a.totalPrice),available,remaining,location,attributes:record(a.attributes),
+   ...(a.expiresAt===undefined?{}:{expiresAt:utc(a.expiresAt)}),...(a.quantity===undefined?{}:{quantity:integer(a.quantity,1)}),
+   ...(a.priceType===undefined?{}:{priceType:'SIMULATED' as const}),...(a.simulation===undefined?{}:{simulation:true as const})};
  });
  requireShape(new Set(offers.map(a=>a.offerId)).size===offers.length);
  return {provider,generatedAt:utc(o.generatedAt),offers};
 }
+function holdIdentifier(x:unknown):string{const s=str(x);requireShape(/^[A-Za-z0-9_-]{1,100}$/.test(s));return s}
 function holdBody(input:HoldRequest):HoldRequest{
  const o=record(input),c=record(o.customer);requireShape(o.consent===true);
  const customer:HoldRequest['customer']={name:str(c.name),phone:str(c.phone)};
- if(c.email!==undefined)customer.email=str(c.email);
- return {offerId:str(o.offerId),quantity:integer(o.quantity,1),customer,externalRef:external(o.externalRef),consent:true,
- ...(o.notes===undefined?{}:{notes:str(o.notes,true)})};
+ requireShape(customer.name.length>=2&&customer.name.length<=100&&/^[0-9+\- ]{9,20}$/.test(customer.phone));
+ if(c.email!==undefined){customer.email=str(c.email);requireShape(customer.email.length<=120)}
+ const offerId=str(o.offerId);requireShape(offerId.length<=400);
+ const notes=o.notes===undefined?undefined:str(o.notes,true);requireShape(notes===undefined||notes.length<=500);
+ return {offerId,quantity:integer(o.quantity===undefined?1:o.quantity,1),customer,externalRef:external(o.externalRef),consent:true,
+ ...(notes===undefined?{}:{notes})};
 }
 function parseCreated(x:unknown,request:HoldRequest):HoldCreated{
  const o=record(x);requireShape(o.offerId===request.offerId&&o.externalRef===request.externalRef&&o.reservationState==='awaiting_payment');
- return {holdId:str(o.holdId),offerId:request.offerId,externalRef:request.externalRef,reservationState:'awaiting_payment',
+ return {holdId:holdIdentifier(o.holdId),offerId:request.offerId,externalRef:request.externalRef,reservationState:'awaiting_payment',
  paymentState:payment(o.paymentState),totalPrice:integer(o.totalPrice),currency:idr(o.currency),expiresAt:utc(o.expiresAt)};
 }
 function matching(x:unknown,id:string):Record<string,unknown>{const o=record(x);requireShape(o.holdId===id);return o}
@@ -148,14 +173,13 @@ function parseReleased(x:unknown,id:string):HoldReleased{
  const o=matching(x,id);requireShape(o.reservationState==='cancelled');return {holdId:id,reservationState:'cancelled'};
 }
 function parseSnapshot(x:unknown,id:string):HoldSnapshot{
- const o=matching(x,id),result:HoldSnapshot={holdId:id,reservationState:oneOf<HoldState>(o.reservationState,states)};
- if(o.paymentState!==undefined)result.paymentState=payment(o.paymentState);
+ const o=matching(x,id),state=oneOf<HoldState>(o.reservationState,states);
+ const expiresAt=o.expiresAt===null?null:utc(o.expiresAt);
+ requireShape(state!=='awaiting_payment'||expiresAt!==null);
+ const result:HoldSnapshot={holdId:holdIdentifier(id),reservationState:state,paymentState:payment(o.paymentState),
+  externalRef:external(o.externalRef),offerId:str(o.offerId),totalPrice:integer(o.totalPrice),currency:idr(o.currency),expiresAt};
  if(o.voucher!==undefined)result.voucher=voucher(o.voucher);
- if(o.expiresAt!==undefined)result.expiresAt=utc(o.expiresAt);
- if(o.externalRef!==undefined)result.externalRef=external(o.externalRef);
- if(o.offerId!==undefined)result.offerId=str(o.offerId);
- if(o.totalPrice!==undefined)result.totalPrice=integer(o.totalPrice);
- if(o.currency!==undefined)result.currency=idr(o.currency);
+ requireShape(state!=='reserved'||result.voucher!==undefined);
  return result;
 }
 async function boundedJson(response:Response):Promise<unknown>{
@@ -202,7 +226,7 @@ export function createInteropClient(config:InteropConfig){
   };
   try{return await Promise.race([work(),deadline])}finally{clearTimeout(timer!);ctrl.abort()}
  }
- function pathFor(op:Operation,id:string,suffix=''){return local(op,()=>{const s=str(id);requireShape(s.length<=512&&s!=='.'&&s!=='..');return '/holds/'+encodeURIComponent(s)+suffix})}
+ function pathFor(op:Operation,id:string,suffix=''){return local(op,()=>{const s=holdIdentifier(id);return '/holds/'+encodeURIComponent(s)+suffix})}
  function optionalKey(op:Operation,key?:string){if(key!==undefined)local(op,()=>requireShape(typeof key==='string'&&idemPattern.test(key)));return key}
  return Object.freeze({
   capabilities:()=>call('capabilities','/capabilities','GET',[200],x=>parseCapabilities(x,provider)),

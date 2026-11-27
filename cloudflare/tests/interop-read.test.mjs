@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 import worker from '../src/index.ts';
 import {createInteropJournal} from '../src/interop-journal.ts';
+import {createInternalCheckoutBridge} from '../src/interop-checkout-bridge.ts';
 import {createInteropPlanPreparation,PreparationError} from '../src/interop-plan-preparation.ts';
 import {createPlan,updatePlan} from '../src/plans.ts';
 import {mockProvider,TOKEN} from './fixtures/interop-provider.mjs';
@@ -36,7 +37,7 @@ test('I4/I5: authenticated read returns redacted D1 truth and no-cache',async t=
  const started=await f.journal.beginOperation(lock,0,'HOLD');
  const inflight=await (await f.get()).json();assert.equal(inflight.status,'IN_FLIGHT');
  await f.journal.recordOutcome(lock,0,'HOLD',started.operation.revision,{state:'SUCCEEDED',result:{holdId:'H-1',offerId:offer.offerId,externalRef:f.checkout.orderId,reservationState:'awaiting_payment',paymentState:'unpaid',totalPrice:10000,currency:'IDR',expiresAt:'2026-12-01T03:15:00Z'}});
- const held=await (await f.get()).json();assert.equal(held.status,'AWAITING_CONFIRMATION');assert.equal(held.items[0].state,'HELD');
+ const held=await (await f.get()).json();assert.equal(held.status,'AWAITING_CONFIRMATION');assert.equal(held.items[0].state,'HELD');assert.equal(held.items[0].reservationState,'awaiting_payment');assert.equal(held.items[0].paymentState,'unpaid');
 });
 test('I4/I5: wrong/missing token, unknown ID and malformed token do not disclose checkout',async t=>{
  const f=await fixture(t);
@@ -140,4 +141,79 @@ test('I5: explicit approved price is required before any network call',async t=>
  await assert.rejects(gateway.prepare(f.id,f.auth,{...f.input,approvedTotal:undefined}),
   e=>e instanceof PreparationError&&e.code==='INVALID_CHECKOUT_INPUT');
  assert.equal(remote.calls.length,0);
+});
+
+test('I5: provider-required email is verified before creating checkout and releases lock on rejection',async t=>{
+ const f=await planSetup(t),remote=mockProvider('transport');
+ const fetcher=async(u,i)=>{const r=await remote.fetcher(u,i);if(!u.endsWith('/capabilities'))return r;return new Response(JSON.stringify({...await r.json(),requiredCustomerFields:['name','phone','email']}),{status:r.status})};
+ const gateway=createInteropPlanPreparation(f.env,fetcher,{verifySelection:()=>true});
+ await assert.rejects(gateway.prepare(f.id,f.auth,{...f.input,customer:{name:f.input.customer.name,phone:f.input.customer.phone}}),e=>e instanceof PreparationError&&e.code==='REQUIRED_CUSTOMER_FIELD_MISSING');
+ assert.equal((await f.env.DB.prepare('SELECT order_lock FROM jt_plans WHERE id=?').bind(f.id).first()).order_lock,null);assert.ok(remote.calls.every(c=>c.method==='GET'));
+});
+
+test('I5 consent: changed material selection or absent consent blocks before any provider call',async t=>{
+ const f=await planSetup(t),remote=mockProvider('transport');
+ const gateway=createInteropPlanPreparation(f.env,remote.fetcher,{verifySelection:()=>true});
+ await assert.rejects(gateway.prepare(f.id,f.auth,{...f.input,consent:false}),e=>e.code==='INVALID_CHECKOUT_INPUT');
+ await assert.rejects(gateway.prepare(f.id,f.auth,{...f.input,approvedItems:[{...item,withDriver:true}]}),e=>e.code==='APPROVED_SELECTION_MISMATCH');
+ assert.equal(remote.calls.length,0);assert.equal((await f.env.DB.prepare('SELECT order_lock FROM jt_plans WHERE id=?').bind(f.id).first()).order_lock,null);
+});
+test('I5 preparation opt-in requires explicit separate flag, disabled booking, approved selection and same origin',async t=>{
+ const f=await planSetup(t),env={...f.env,INTEROP_PREPARE_ENABLED:'true'};
+ const health=async e=>await (await worker.fetch(new Request('https://fixture.test/api/health'),e)).json();
+ assert.equal((await health(f.env)).interopPreparationEnabled,false);
+ assert.equal((await health(env)).interopPreparationEnabled,true);
+ assert.equal((await health({...env,BOOKING_ENABLED:'true'})).interopPreparationEnabled,false);
+ const req=(body,origin='https://fixture.test')=>new Request(f.auth.url,{method:'POST',headers:{'X-Plan-Token':f.ownerToken,'Content-Type':'application/json',Origin:origin},body:JSON.stringify(body)});
+ assert.equal((await worker.fetch(req(f.input),env)).status,400);
+ assert.equal((await worker.fetch(req({...f.input,approvedItems:[item]},'https://wrong.test'),env)).status,403);
+ assert.equal((await worker.fetch(req({...f.input,approvedItems:[item],consent:false}),env)).status,400);
+ const book=await worker.fetch(new Request('https://fixture.test/api/book',{method:'POST',body:'{}'}),env);
+ assert.equal(book.status,503);
+});
+
+test('I5 token recovery endpoint authenticates original plan, key and checkout token; no provider call or second row',async t=>{
+ const f=await planSetup(t),remote=mockProvider('transport');
+ const prepared=await createInteropPlanPreparation(f.env,remote.fetcher,{verifySelection:()=>true}).prepare(f.id,f.auth,f.input);
+ const count=remote.calls.length;
+ const recover=(headers)=>worker.fetch(new Request(f.auth.url,{method:'GET',headers:{'X-Plan-Token':f.ownerToken,'X-Checkout-Key':f.input.key,'X-Interop-Token':f.input.accessToken,...headers}}),f.env);
+ const r=await recover({});assert.equal(r.status,200);assert.equal(r.headers.get('cache-control'),'no-store');const data=await r.json();assert.equal(data.orderId,prepared.orderId);assert.equal(data.status,'NOT_STARTED');assert.doesNotMatch(JSON.stringify(data),/Synthetic Plan|0800000000|opaque-fixture/);
+ assert.equal((await recover({'X-Interop-Token':'d'.repeat(64)})).status,404);
+ assert.equal((await recover({'X-Checkout-Key':'other_key_000000000'})).status,404);
+ assert.equal((await recover({'X-Plan-Token':'wrong'})).status,403);
+ assert.equal(remote.calls.length,count);assert.equal((await f.env.DB.prepare('SELECT COUNT(*) AS n FROM jt_checkout_requests').first()).n,2);
+});
+
+test('I5 internal bridge requires both credentials, bound plan lock, server authorization, then HOLD/CONFIRM separately',async t=>{
+ const f=await planSetup(t),remote=mockProvider('transport');
+ const prepared=await createInteropPlanPreparation(f.env,remote.fetcher,{verifySelection:()=>true}).prepare(f.id,f.auth,f.input);
+ const env={...f.env,BOOKING_ENABLED:'true'},clock=()=>Date.parse('2026-12-01T03:00:00Z'),options={now:clock,authorize:()=>true};
+ const args=[f.id,f.auth,f.input.key,f.input.accessToken];
+ const before=remote.calls.length;
+ await assert.rejects(createInternalCheckoutBridge(f.env,remote.fetcher,options).hold(...args),e=>e.code==='EXECUTION_DISABLED');
+ await assert.rejects(createInternalCheckoutBridge(env,remote.fetcher,{now:clock}).hold(...args),e=>e.code==='EXECUTION_DISABLED');
+ await assert.rejects(createInternalCheckoutBridge(env,remote.fetcher,{...options,authorize:()=>false}).hold(...args),e=>e.code==='EXECUTION_NOT_AUTHORIZED');
+ await assert.rejects(createInternalCheckoutBridge(env,remote.fetcher,options).hold(f.id,f.auth,f.input.key,'d'.repeat(64)));
+ assert.equal(remote.calls.length,before);
+ const bridge=createInternalCheckoutBridge(env,remote.fetcher,{...options,authorize:(action,id)=>id===prepared.orderId&&action==='HOLD'});
+ const h=await bridge.hold(...args);assert.equal(h.status,'AWAITING_CONFIRMATION');
+ await assert.rejects(bridge.confirm(...args),e=>e.code==='EXECUTION_NOT_AUTHORIZED');
+ assert.equal(remote.calls.filter(c=>c.path.endsWith('/confirm')).length,0);
+ const confirmed=await createInternalCheckoutBridge(env,remote.fetcher,{...options,authorize:(action,id)=>id===prepared.orderId&&action==='CONFIRM'}).confirm(...args);
+ assert.equal(confirmed.status,'CONFIRMED');assert.equal(remote.calls.filter(c=>c.method==='POST').length,2);
+ const status=await (await worker.fetch(new Request('https://fixture.test/api/interop/checkouts/'+prepared.orderId,{headers:{'X-Interop-Token':f.input.accessToken}}),f.env)).json();
+ assert.equal(status.status,'CONFIRMED');assert.equal(status.paymentVerified,false);
+ await assert.rejects(createInteropPlanPreparation(f.env,remote.fetcher,{verifySelection:()=>true}).prepare(f.id,f.auth,f.input),e=>e.code==='CHECKOUT_ALREADY_STARTED');
+ assert.equal(remote.calls.filter(c=>c.method==='POST').length,2);
+});
+test('I5 internal bridge refuses a checkout whose plan lock was lost or replaced',async t=>{
+ const f=await planSetup(t),remote=mockProvider('transport');
+ await createInteropPlanPreparation(f.env,remote.fetcher,{verifySelection:()=>true}).prepare(f.id,f.auth,f.input);
+ await f.env.DB.prepare('UPDATE jt_plans SET order_lock=? WHERE id=?').bind('different-lock',f.id).run();
+ const bridge=createInternalCheckoutBridge({...f.env,BOOKING_ENABLED:'true'},remote.fetcher,{authorize:()=>true});
+ await assert.rejects(bridge.hold(f.id,f.auth,f.input.key,f.input.accessToken),e=>e.code==='SOURCE_LOCK_MISMATCH');
+ assert.equal(remote.calls.filter(c=>c.method==='POST').length,0);
+});
+test('I5 internal bridge is not imported by Worker routes or legacy orders',()=>{
+ for(const name of ['index.ts','orders.ts','plans.ts','packages.ts'])assert.doesNotMatch(readFileSync(new URL('../src/'+name,import.meta.url),'utf8'),/from\s+['"][^'"]*interop-checkout-bridge/);
 });

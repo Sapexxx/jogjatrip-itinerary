@@ -61,7 +61,8 @@ function normalizeItem(input:ServiceItem):ServiceItem{
 }
 function normalizeIntent(input:CheckoutIntent):CheckoutIntent{
  demand(input&&input.consent===true,'CONSENT_REQUIRED');demand(input.customer&&input.source&&Array.isArray(input.items)&&input.items.length>=1&&input.items.length<=3);
- const customer={name:text(input.customer.name,200),phone:text(input.customer.phone,40),...(input.customer.email===undefined?{}:{email:text(input.customer.email,254)})};
+ const customer={name:text(input.customer.name,100),phone:text(input.customer.phone,20),...(input.customer.email===undefined?{}:{email:text(input.customer.email,120)})};
+ demand(customer.name.length>=2&&/^[0-9+\- ]{9,20}$/.test(customer.phone),'INVALID_CUSTOMER',400);
  demand(['cart','plan','package'].includes(input.source.kind));
  const source={kind:input.source.kind,...(input.source.id===undefined?{}:{id:text(input.source.id,128)})};
  demand(source.kind==='cart'||'id' in source);
@@ -75,7 +76,7 @@ function normalizeOffers(intent:CheckoutIntent,offers:readonly PreparedOffer[]|u
   const x=intent.items[i],m=itemToOfferQuery(x.item),period=o.period;
   demand(o.provider===m.provider&&o.entityType===m.entityType&&o.currency==='IDR'&&o.quantity===m.query.quantity&&period?.startDate===m.query.startDate&&period?.endDate===(m.query.endDate??m.query.startDate),'OFFER_MISMATCH',409);
   demand(o.totalPrice===x.expectedTotal,'PRICE_CHANGED',409);
-  return {provider:o.provider,entityType:o.entityType,resourceId:text(o.resourceId),offerId:text(o.offerId,2048),quantity:int(o.quantity,1),period:{startDate:period.startDate,endDate:period.endDate},totalPrice:int(o.totalPrice),currency:'IDR',generatedAt:utc(o.generatedAt)};
+  return {provider:o.provider,entityType:o.entityType,resourceId:text(o.resourceId),offerId:text(o.offerId,400),quantity:int(o.quantity,1),period:{startDate:period.startDate,endDate:period.endDate},totalPrice:int(o.totalPrice),currency:'IDR',generatedAt:utc(o.generatedAt),...(o.expiresAt===undefined?{}:{expiresAt:utc(o.expiresAt)})};
  });
 }
 function rowCheckout(row:any):CheckoutRecord{return {orderId:row.order_id,externalRef:row.order_id,mode:row.execution_mode,intent:JSON.parse(row.intent_json),offers:JSON.parse(row.offers_json),createdAt:row.created_at}}
@@ -194,7 +195,7 @@ export function createInteropJournal(db:D1Binding,options:{now?:()=>number;lease
  }
  function projectResult(op:JournalRecord,checkout:CheckoutRecord,input:any){
   demand(input&&typeof input==='object');
-  const holdId=text(input.holdId);
+  const holdId=text(input.holdId,100);demand(/^[A-Za-z0-9_-]{1,100}$/.test(holdId));
   if(op.operation==='HOLD'){
    const offer=checkout.offers[op.itemIndex];
    demand(input.offerId===offer.offerId&&input.externalRef===checkout.externalRef&&input.reservationState==='awaiting_payment'&&input.currency==='IDR'&&payment.has(input.paymentState));

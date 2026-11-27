@@ -1,7 +1,7 @@
 name: I4 Hold Saga validation
 on:
   push:
-    branches: [feat/interop-saga-i4, feat/interop-client-i5, feat/interop-i45-hardening, feat/interop-i45-closure, feat/interop-provider-contract-gate, feat/interop-final-itinerary-alignment, integration/final-interop-0.2-reviewed, integration/main-cloudflare-conflict-resolved, feat/final-i6-staging-evidence-gate]
+    branches: [feat/interop-saga-i4, feat/interop-client-i5, feat/interop-i45-hardening, feat/interop-i45-closure, feat/interop-provider-contract-gate, feat/interop-final-itinerary-alignment, integration/final-interop-0.2-reviewed, integration/main-cloudflare-conflict-resolved, feat/final-i6-staging-evidence-gate, feat/final-contract-0.2-compliance]
   workflow_dispatch:
 permissions:
   contents: read
@@ -17,6 +17,13 @@ jobs:
       - name: Install pinned Worker dependencies
         working-directory: cloudflare
         run: npm ci --no-audit --no-fund
+      - name: Verify canonical source manifest
+        run: node tools/check-source-manifest.mjs
+      - name: Install official schema validator dependencies
+        working-directory: tools
+        run: npm ci --no-audit --no-fund
+      - name: Official JSON Schema consumer acceptance (offline fixtures)
+        run: node --experimental-strip-types --test tools/check-consumer-schemas.test.mjs
       - name: Run entire Worker test suite
         working-directory: cloudflare
         run: npm test

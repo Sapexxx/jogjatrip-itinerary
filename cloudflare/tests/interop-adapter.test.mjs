@@ -35,7 +35,7 @@ test('I2: all provider capabilities supported produces a single contract mode',a
  const {adapter,calls}=make();const d=await adapter.chooseMode(req());assert.equal(d.mode,'CONTRACT_0_2');assert.deepEqual(d.capabilities.map(x=>x.provider),['hotel','wisata','transport']);assert.equal(calls.length,3);
 });
 test('I2: holds false, durable false, missing entity, zero TTL block full package',async()=>{
- for(const [changes,reason] of [[{holds:false},'HOLDS_UNSUPPORTED'],[{durableStorage:false},'DURABILITY_UNVERIFIED'],[{entityTypes:['transport_trip']},'ENTITY_UNSUPPORTED'],[{holdTtlMinutes:0},'INVALID_TTL']]){
+ for(const [changes,reason] of [[{holds:false},'HOLDS_UNSUPPORTED'],[{durableStorage:false},'DURABILITY_UNVERIFIED'],[{entityTypes:['transport_trip']},'INVALID_CAPABILITIES'],[{entityTypes:['lodging']},'ENTITY_UNSUPPORTED'],[{holdTtlMinutes:0},'INVALID_CAPABILITIES']]){
   const {adapter,calls}=make({}, {allowLegacy:true},(k,u,i,next)=>k==='wisata'?capPatch(k,u,i,next,changes):next());
   const d=await adapter.prepareCheckout(req());assert.equal(d.decision.mode,'BLOCKED');assert.equal(d.decision.capabilities.find(x=>x.provider==='wisata').reason,reason);assert.equal(d.offers.length,0);assert.equal(calls.length,3);assert.ok(calls.every(c=>c.url.endsWith('/capabilities')));
  }
@@ -73,7 +73,7 @@ test('I2: invalid cart, fractional quantity, guests and empty room are rejected'
 test('I2: ServiceItem date and quantity mapping, no unsupported option/filter fields',()=>{
  assert.deepEqual(itemToOfferQuery(hotel),{provider:'hotel',entityType:'lodging',query:{startDate:hotel.checkIn,endDate:hotel.checkOut,quantity:1,limit:20}});
  assert.deepEqual(itemToOfferQuery(wisata).query,{startDate:wisata.visitDate,quantity:2,limit:20});
- assert.deepEqual(itemToOfferQuery(transport).query,{startDate:transport.startDate,endDate:transport.endDate,quantity:1,limit:20});
+ assert.deepEqual(itemToOfferQuery(transport).query,{startDate:transport.startDate,endDate:transport.endDate,quantity:1,limit:20,withDriver:true});
 });
 test('I2: exact authoritative fixture selections produce three canonical offers without mutations',async()=>{
  const {adapter,calls}=make({},proof);const r=await adapter.prepareCheckout(req());
@@ -124,4 +124,16 @@ test('I2: legacy catalog remains readable for all three providers with Contract 
 test('I2: no wiring into runtime routes or booking; production booking stays false',()=>{
  for(const f of ['index.ts','orders.ts','provider.ts','plans.ts','packages.ts'])assert.doesNotMatch(readFileSync(new URL('../src/'+f,import.meta.url),'utf8'),/from\s+['"][^'"]*interop-adapter\.ts/);
  const wrangler=readFileSync(new URL('../wrangler.jsonc',import.meta.url),'utf8');assert.match(wrangler,/"BOOKING_ENABLED"\s*:\s*"false"/);assert.doesNotMatch(wrangler,/"INTEROP_HOLDS"\s*:\s*"true"/);
+});
+
+test('final contract: quantity above advertised max blocks before offers; transport driver is forwarded',async()=>{
+ const a=make({},proof,(k,u,i,next)=>k==='wisata'?capPatch(k,u,i,next,{maxQuantity:1}):next());
+ const b=await a.adapter.prepareCheckout(req());assert.equal(b.decision.mode,'BLOCKED');assert.equal(b.decision.capabilities.find(c=>c.provider==='wisata').reason,'QUANTITY_UNSUPPORTED');assert.ok(a.calls.every(c=>c.url.endsWith('/capabilities')));
+ const x=make({},proof);assert.equal((await x.adapter.prepareCheckout(req([transport]))).preflightComplete,true);
+ assert.equal(new URL(x.calls.find(c=>c.url.includes('/offers?')).url).searchParams.get('withDriver'),'true');
+});
+
+test('expired offer cannot enter checkout even with authoritative selection proof',async()=>{
+ const {adapter,calls}=make({}, {...proof,now:()=>Date.parse('2026-12-01T03:05:01Z')});
+ const r=await adapter.prepareCheckout(req([transport]));assert.equal(r.preflightComplete,false);assert.equal(r.offers[0].reason,'OFFER_EXPIRED');assert.ok(calls.every(c=>c.method==='GET'));
 });

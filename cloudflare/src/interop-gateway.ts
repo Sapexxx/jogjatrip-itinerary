@@ -6,10 +6,11 @@ import {createInteropJournal} from './interop-journal.ts';
 import type {JournalRecord,CheckoutRecord} from './interop-journal.ts';
 import {JournalError} from './interop-journal.ts';
 import type {D1Binding} from './types.ts';
+import {contractState} from './core.ts';
 
 export type ReadStatus='NOT_STARTED'|'IN_FLIGHT'|'UNKNOWN'|'AWAITING_CONFIRMATION'|'CONFIRMED'|'COMPENSATED'|'PARTIAL'|'BLOCKED';
 export interface PublicItemStatus {
- index:number;provider:string;state:'NOT_STARTED'|'IN_FLIGHT'|'UNKNOWN'|'HELD'|'CONFIRMED'|'RELEASED'|'REJECTED';
+ index:number;provider:string;reservationState:ReturnType<typeof contractState>['reservationState'];paymentState:ReturnType<typeof contractState>['paymentState'];state:'NOT_STARTED'|'IN_FLIGHT'|'UNKNOWN'|'HELD'|'CONFIRMED'|'RELEASED'|'REJECTED';
 }
 export interface PublicCheckoutStatus {
  orderId:string;status:ReadStatus;totalItems:number;items:PublicItemStatus[];
@@ -28,7 +29,11 @@ export function projectCheckout(view:View):PublicCheckoutStatus {
   else if(release?.state==='SUCCEEDED')state='RELEASED';
   else if([hold,confirm,release].some(o=>o?.state==='REJECTED'))state='REJECTED';
   else if(hold?.state==='SUCCEEDED')state='HELD';
-  return {index,provider:offer.provider,state};
+  // The public read model reports only recorded provider truth. A release
+  // has no financial status in its response, and unresolved mutations invalidate it.
+  const latest=state==='CONFIRMED'?confirm?.result:state==='HELD'?hold?.result:state==='RELEASED'?release?.result:undefined;
+  const recorded=contractState(latest&&'reservationState' in latest?latest.reservationState:undefined,latest&&'paymentState' in latest?latest.paymentState:undefined);
+  return {index,provider:offer.provider,state,...recorded};
  });
  const count=(s:PublicItemStatus['state'])=>items.filter(i=>i.state===s).length;
  let status:ReadStatus='BLOCKED';

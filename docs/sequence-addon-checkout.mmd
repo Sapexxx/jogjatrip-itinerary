@@ -1,0 +1,32 @@
+%% Add-on langsung antar sistem (tanpa Itinerary). Contoh yang SUDAH ada di kode: JogjaStay (utama) memesan kendaraan di JogjaTrans.
+%% Pola yang sama berlaku untuk arah lain (Transport -> Hotel/Wisata) pada Tahap 2.
+sequenceDiagram
+    autonumber
+    actor U as Pengguna
+    participant H as JogjaStay (sistem utama)
+    participant T as JogjaTrans (penyedia add-on)
+
+    U->>H: Pilih kamar + centang "tambah kendaraan"
+    H->>T: GET /interop/capabilities
+    T-->>H: contract 0.2.0, holds=true, durableStorage=true
+    Note over H: Gagal atau holds != true: panel kendaraan disembunyikan,<br/>pesan kamar tetap berjalan
+    H->>T: GET /interop/offers?startDate&endDate
+    T-->>H: offers[] (offerId buram, berlaku 5 menit)
+    U->>H: Pilih kendaraan, setujui pengiriman nama + telepon
+    H->>T: POST /interop/holds (Idempotency-Key, externalRef, consent=true)
+    T-->>H: 201 awaiting_payment, expiresAt = +15 menit
+    Note over T: Hold dihitung sebagai stok untuk semua pemesan
+    H->>H: Catat kamar (kunci stabil, jurnal saga)
+    alt Kamar berhasil
+        H->>T: POST /interop/holds/{id}/confirm
+        T-->>H: 200 reserved + voucher.code
+        H-->>U: Kamar + voucher kendaraan (simulasi)
+    else Kamar gagal (kamar habis)
+        H->>T: POST /interop/holds/{id}/release
+        T-->>H: 200 cancelled (stok kembali, data pribadi dihapus)
+        H-->>U: Kamar tidak tersedia, kendaraan dilepas
+    else Respons confirm hilang
+        H->>T: GET /interop/holds/{id}
+        T-->>H: reserved (atau masih awaiting_payment)
+        Note over H: Jangan membuat hold baru, jangan membatalkan kamar.<br/>Status "menunggu konfirmasi kendaraan" sampai GET pasti
+    end

@@ -93,8 +93,8 @@ function jtParsePartnerHandoff(search,nowDate){
  const altIds=kind==='transport'?q.getAll('vehicle'):[];
  if(kind==='transport'&&ids.length+altIds.length!==1)return {kind,id:null,date:null,endDate:null,roomId:null};
  const rawId=ids.length===1?ids[0]:altIds[0];
- const id=ids.length<=1&&/^[A-Za-z0-9_-]{1,64}$/.test(rawId||'')?rawId:null;
- const room=q.getAll('roomId'),roomId=kind==='hotel'&&room.length===1&&/^[A-Za-z0-9_-]{1,64}$/.test(room[0])?room[0]:null;
+ const id=ids.length<=1&&/^[A-Za-z0-9_-]{1,60}$/.test(rawId||'')?rawId:null;
+ const room=q.getAll('roomId'),roomId=kind==='hotel'&&room.length===1&&/^[A-Za-z0-9_-]{1,60}$/.test(room[0])?room[0]:null;
  const dateField=kind==='hotel'?'checkIn':'startDate';
  const endField=kind==='hotel'?'checkOut':'endDate';
  const dates=q.getAll(dateField),ends=q.getAll(endField);
@@ -107,14 +107,16 @@ function jtParsePartnerHandoff(search,nowDate){
  const end=ends.length===1?valid(ends[0]):null;
  const days=date&&end?Math.round((Date.parse(end)-Date.parse(date))/86400000):null;
  const endDate=days!==null&&days>=(kind==='hotel'?1:0)&&days<=(kind==='hotel'?30:29)?end:null;
- return {kind,id,date,endDate,roomId};
+ const driver=q.getAll('withDriver');
+ const withDriver=kind==='transport'&&driver.length===1&&['true','false'].includes(driver[0])?driver[0]==='true':undefined;
+ return {kind,id,date,endDate,roomId,...(withDriver===undefined?{}:{withDriver})};
 }
 let jtInboundPartner=null;
 function jtInitPartnerHandoff(){
  const url=new URL(window.location.href),parsed=jtParsePartnerHandoff(url.search,dateStr(new Date()));
  if(!parsed)return;
  jtInboundPartner=parsed;
- for(const key of ['from','hotelId','roomId','checkIn','checkOut','vehicleId','vehicle','startDate','endDate'])url.searchParams.delete(key);
+ for(const key of ['from','hotelId','roomId','checkIn','checkOut','vehicleId','vehicle','startDate','endDate','withDriver'])url.searchParams.delete(key);
  window.history.replaceState(window.history.state,'',url.pathname+url.search+url.hash);
  jtApplyPartnerHandoff();
 }
@@ -143,10 +145,12 @@ function jtApplyPartnerHandoff(){
  // is never authoritative evidence of inventory or a selected rental option.
  jtInboundPartner=null;
  page('explore');selectCatalogTab('transport');
- if(p.date&&p.endDate){
-  $('#exploreRentStart').value=p.date;$('#exploreRentEnd').value=p.endDate;
-  invalidateExploreRental();loadExploreVehicles();
+ if(p.withDriver!==undefined){
+  $('#exploreRentDriver').value=String(p.withDriver);
+  if(p.withDriver&&$('#exploreRentType').value==='motor'){$('#exploreRentType').value='mobil';$('#exploreRentCategory').value='all'}
  }
+ if(p.date&&p.endDate){$('#exploreRentStart').value=p.date;$('#exploreRentEnd').value=p.endDate;}
+ if(p.withDriver!==undefined||(p.date&&p.endDate)){invalidateExploreRental();loadExploreVehicles();}
  toast('Tautan JogjaTrans diterima. Periksa model '+p.id+' dan stok di katalog terbaru sebelum memilih.');
 }
 function jtReadLocation({initial=false}={}){
