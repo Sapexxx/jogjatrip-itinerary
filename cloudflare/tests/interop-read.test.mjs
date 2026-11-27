@@ -149,3 +149,24 @@ test('I5: provider-required email is verified before creating checkout and relea
  await assert.rejects(gateway.prepare(f.id,f.auth,{...f.input,customer:{name:f.input.customer.name,phone:f.input.customer.phone}}),e=>e instanceof PreparationError&&e.code==='REQUIRED_CUSTOMER_FIELD_MISSING');
  assert.equal((await f.env.DB.prepare('SELECT order_lock FROM jt_plans WHERE id=?').bind(f.id).first()).order_lock,null);assert.ok(remote.calls.every(c=>c.method==='GET'));
 });
+
+test('I5 consent: changed material selection or absent consent blocks before any provider call',async t=>{
+ const f=await planSetup(t),remote=mockProvider('transport');
+ const gateway=createInteropPlanPreparation(f.env,remote.fetcher,{verifySelection:()=>true});
+ await assert.rejects(gateway.prepare(f.id,f.auth,{...f.input,consent:false}),e=>e.code==='INVALID_CHECKOUT_INPUT');
+ await assert.rejects(gateway.prepare(f.id,f.auth,{...f.input,approvedItems:[{...item,withDriver:true}]}),e=>e.code==='APPROVED_SELECTION_MISMATCH');
+ assert.equal(remote.calls.length,0);assert.equal((await f.env.DB.prepare('SELECT order_lock FROM jt_plans WHERE id=?').bind(f.id).first()).order_lock,null);
+});
+test('I5 preparation opt-in requires explicit separate flag, disabled booking, approved selection and same origin',async t=>{
+ const f=await planSetup(t),env={...f.env,INTEROP_PREPARE_ENABLED:'true'};
+ const health=async e=>await (await worker.fetch(new Request('https://fixture.test/api/health'),e)).json();
+ assert.equal((await health(f.env)).interopPreparationEnabled,false);
+ assert.equal((await health(env)).interopPreparationEnabled,true);
+ assert.equal((await health({...env,BOOKING_ENABLED:'true'})).interopPreparationEnabled,false);
+ const req=(body,origin='https://fixture.test')=>new Request(f.auth.url,{method:'POST',headers:{'X-Plan-Token':f.ownerToken,'Content-Type':'application/json',Origin:origin},body:JSON.stringify(body)});
+ assert.equal((await worker.fetch(req(f.input),env)).status,400);
+ assert.equal((await worker.fetch(req({...f.input,approvedItems:[item]},'https://wrong.test'),env)).status,403);
+ assert.equal((await worker.fetch(req({...f.input,approvedItems:[item],consent:false}),env)).status,400);
+ const book=await worker.fetch(new Request('https://fixture.test/api/book',{method:'POST',body:'{}'}),env);
+ assert.equal(book.status,503);
+});

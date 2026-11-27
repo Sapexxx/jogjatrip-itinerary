@@ -16,7 +16,18 @@ export class PreparationError extends Error {
  readonly status:number;readonly code:string;
  constructor(code:string,status=409){super(code);this.name='PreparationError';this.code=code;this.status=status}
 }
-type PreparedInput={key:string;accessToken:string;consent:true;approvedTotal:number;customer:{name:string;phone:string;email?:string}};
+type PreparedInput={approvedItems?:ServiceItem[];key:string;accessToken:string;consent:true;approvedTotal:number;customer:{name:string;phone:string;email?:string}};
+// Compare only contract material fields, not browser display metadata.
+function material(item:ServiceItem){
+ if(item?.type==='hotel')return [item.type,item.hotelId,item.roomId,item.checkIn,item.checkOut,item.guests];
+ if(item?.type==='wisata')return [item.type,item.destinationId,item.visitDate,item.quantity,item.tier];
+ if(item?.type==='transport')return [item.type,item.vehicleId,item.startDate,item.endDate,item.withDriver];
+ throw new PreparationError('APPROVED_SELECTION_MISMATCH',409);
+}
+function matchSelection(approved:ServiceItem[]|undefined,actual:ServiceItem[]){
+ if(approved!==undefined&&(!Array.isArray(approved)||JSON.stringify(approved.map(material))!==JSON.stringify(actual.map(material))))
+  throw new PreparationError('APPROVED_SELECTION_MISMATCH',409);
+}
 const keyPattern=/^[A-Za-z0-9_-]{16,100}$/;
 const tokenPattern=/^[a-f0-9]{64}$/;
 export function createInteropPlanPreparation(
@@ -42,6 +53,7 @@ export function createInteropPlanPreparation(
     // A successful replay must not silently accept changed customer/consent.
     // Recovery uses the original credential pair, but may not rewrite the
     // durable checkout or disclose its data to a changed request.
+    matchSelection(input.approvedItems,prior.intent.items.map(i=>i.item));
     const original=prior.intent.customer;
     if(prior.intent.source.kind!=='plan'||prior.intent.source.id!==planId)
      throw new PreparationError('SOURCE_CONFLICT',409);
@@ -67,6 +79,7 @@ export function createInteropPlanPreparation(
     const selected=bookable(plan);
     if(selected.length>3)throw new PreparationError('TOO_MANY_PROVIDERS',409);
     const items:ServiceItem[]=selected.map((idx:number)=>plan.activities[idx].sourceItem as ServiceItem);
+    matchSelection(input.approvedItems,items);
     if(new Set(items.map(item=>item.type)).size!==items.length)
      throw new PreparationError('DUPLICATE_PROVIDER',409);
     const adapter=createProviderAdapter(env,fetcher,trustedPolicy);

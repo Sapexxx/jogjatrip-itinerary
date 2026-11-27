@@ -43,6 +43,33 @@ test('I5: script mounted safely, production booking flag remains off',()=>{
  assert.match(source,/method:'GET'/);
  assert.match(source,/cache:'no-store'/);
  assert.match(source,/X-Interop-Token/);
- assert.doesNotMatch(source,/method:'POST'|\/api\/book|X-Order-Token/);
+ assert.doesNotMatch(source,/\/api\/book|X-Order-Token|\/confirm|\/release/);
+ assert.match(source,/\/api\/interop\/itineraries\//);
  assert.match(readFileSync(new URL('../wrangler.jsonc',import.meta.url),'utf8'),/"BOOKING_ENABLED"\s*:\s*"false"/);
+});
+
+test('I5 consent: no request until explicit consent and exact total; prepare-only request contains no provider credential',async()=>{
+ const values=new Map(),store={getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)};
+ const m=globalThis.JTInteropI5.createDraftManager(store,webcrypto);
+ const input={scope:'plan:TEST-1',items:[{type:'transport',vehicleId:'R-01'}],quote:{total:10000,available:true,items:[{amount:10000}]}};
+ const approval={consent:true,priceAccepted:true,approvedTotal:10000,planToken:'a'.repeat(48),customer:{name:'Synthetic User',phone:'081234567890',email:'test@example.test'}};
+ const calls=[];let token;
+ const fetcher=async(url,init)=>{calls.push({url,init});return new Response(JSON.stringify({orderId:'JT-'+'a'.repeat(32),created:true,bookingPerformed:false,state:'NOT_STARTED'}),{status:201})};
+ for(const patch of [{consent:false},{priceAccepted:false},{approvedTotal:9000},{planToken:''},{customer:{name:'X',phone:'1'}}])await assert.rejects(m.prepareServer(input,{...approval,...patch},fetcher));
+ assert.equal(calls.length,0);
+ const result=await m.prepareServer(input,approval,fetcher,t=>token=t);assert.equal(result.bookingPerformed,false);
+ assert.equal(calls.length,1);assert.equal(calls[0].url,'/api/interop/itineraries/TEST-1/prepare');
+ const body=JSON.parse(calls[0].init.body);assert.equal(body.consent,true);assert.equal(body.approvedTotal,10000);assert.equal(body.accessToken,token);assert.deepEqual(body.approvedItems,input.items);assert.match(token,/^[a-f0-9]{64}$/);
+ assert.doesNotMatch([...values.values()].join(''),/Synthetic User|081234567890|test@example.test|R-01/);assert.ok(![...values.values()].join('').includes(token));
+ assert.equal(m.get(input.scope).state,'PREPARED');await assert.rejects(m.prepareServer(input,approval,fetcher),/CHECKOUT_STATE_LOCKED/);assert.equal(calls.length,1);
+});
+test('I5 consent: lost response locks preparation across reload with no automatic retry',async()=>{
+ const values=new Map(),store={getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)};
+ const make=globalThis.JTInteropI5.createDraftManager;
+ const input={scope:'plan:TEST-2',items:[{type:'transport',vehicleId:'R-01'}],quote:{total:10000,available:true,items:[{amount:10000}]}};
+ const approval={consent:true,priceAccepted:true,approvedTotal:10000,planToken:'a'.repeat(48),customer:{name:'Synthetic User',phone:'081234567890',email:'test@example.test'}};
+ let calls=0;const fetcher=async()=>{calls++;throw Error('lost reply')};
+ await assert.rejects(make(store,webcrypto).prepareServer(input,approval,fetcher));
+ assert.equal(make(store,webcrypto).get(input.scope).state,'UNKNOWN');
+ await assert.rejects(make(store,webcrypto).prepareServer(input,approval,fetcher),/CHECKOUT_STATE_LOCKED/);assert.equal(calls,1);
 });
