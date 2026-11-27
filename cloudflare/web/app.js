@@ -145,10 +145,12 @@ function jtApplyPartnerHandoff(){
  // is never authoritative evidence of inventory or a selected rental option.
  jtInboundPartner=null;
  page('explore');selectCatalogTab('transport');
- if(p.date&&p.endDate){
-  $('#exploreRentStart').value=p.date;$('#exploreRentEnd').value=p.endDate;
-  invalidateExploreRental();loadExploreVehicles();
+ if(p.withDriver!==undefined){
+  $('#exploreRentDriver').value=String(p.withDriver);
+  if(p.withDriver&&$('#exploreRentType').value==='motor'){$('#exploreRentType').value='mobil';$('#exploreRentCategory').value='all'}
  }
+ if(p.date&&p.endDate){$('#exploreRentStart').value=p.date;$('#exploreRentEnd').value=p.endDate;}
+ if(p.withDriver!==undefined||(p.date&&p.endDate)){invalidateExploreRental();loadExploreVehicles();}
  toast('Tautan JogjaTrans diterima. Periksa model '+p.id+' dan stok di katalog terbaru sebelum memilih.');
 }
 function jtReadLocation({initial=false}={}){

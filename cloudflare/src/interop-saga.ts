@@ -152,9 +152,9 @@ export function createHoldSaga(journal:Journal,clients:Clients,options:{now?:()=
     try{
      const snapshot=await client(op.provider).getHold(op.holdId);
      if(snapshot.holdId!==op.holdId)continue;
-     if(op.operation==='CONFIRM'&&snapshot.reservationState==='reserved'&&snapshot.voucher){
+     if(op.operation==='CONFIRM'&&snapshot.reservationState==='reserved'&&snapshot.voucher&&snapshot.paymentState!==undefined){
       await journal.recordOutcome(proof,op.itemIndex,'CONFIRM',request.operation.revision,
-       {state:'SUCCEEDED',result:{holdId:op.holdId,reservationState:'reserved',paymentState:snapshot.paymentState??'unpaid',voucher:snapshot.voucher}});
+       {state:'SUCCEEDED',result:{holdId:op.holdId,reservationState:'reserved',paymentState:snapshot.paymentState,voucher:snapshot.voucher}});
       done++;
      }else if(op.operation==='RELEASE'&&snapshot.reservationState==='cancelled'){
       await journal.recordOutcome(proof,op.itemIndex,'RELEASE',request.operation.revision,

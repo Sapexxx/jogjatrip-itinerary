@@ -73,6 +73,13 @@ export function createInteropPlanPreparation(
     const preflight=await adapter.prepareCheckout({items,requestedMode:'CONTRACT_0_2'});
     if(preflight.decision.mode!=='CONTRACT_0_2'||!preflight.preflightComplete)
      throw new PreparationError('PREFLIGHT_NOT_VERIFIED',409);
+    // Required customer data comes from the provider capability contract, not a browser claim.
+    for(const cap of preflight.decision.capabilities){
+     for(const field of cap.capabilities?.requiredCustomerFields??['name','phone']){
+      const value=input.customer[field as keyof PreparedInput['customer']];
+      if(typeof value!=='string'||!value.trim())throw new PreparationError('REQUIRED_CUSTOMER_FIELD_MISSING',400);
+     }
+    }
     const offers:PreparedOffer[]=preflight.offers.map(o=>{
      if(!o.ok)throw new PreparationError('PREFLIGHT_NOT_VERIFIED',409);
      return o.offer;
