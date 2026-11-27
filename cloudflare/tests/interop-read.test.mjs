@@ -36,7 +36,7 @@ test('I4/I5: authenticated read returns redacted D1 truth and no-cache',async t=
  const started=await f.journal.beginOperation(lock,0,'HOLD');
  const inflight=await (await f.get()).json();assert.equal(inflight.status,'IN_FLIGHT');
  await f.journal.recordOutcome(lock,0,'HOLD',started.operation.revision,{state:'SUCCEEDED',result:{holdId:'H-1',offerId:offer.offerId,externalRef:f.checkout.orderId,reservationState:'awaiting_payment',paymentState:'unpaid',totalPrice:10000,currency:'IDR',expiresAt:'2026-12-01T03:15:00Z'}});
- const held=await (await f.get()).json();assert.equal(held.status,'AWAITING_CONFIRMATION');assert.equal(held.items[0].state,'HELD');
+ const held=await (await f.get()).json();assert.equal(held.status,'AWAITING_CONFIRMATION');assert.equal(held.items[0].state,'HELD');assert.equal(held.items[0].reservationState,'awaiting_payment');assert.equal(held.items[0].paymentState,'unpaid');
 });
 test('I4/I5: wrong/missing token, unknown ID and malformed token do not disclose checkout',async t=>{
  const f=await fixture(t);
@@ -140,4 +140,12 @@ test('I5: explicit approved price is required before any network call',async t=>
  await assert.rejects(gateway.prepare(f.id,f.auth,{...f.input,approvedTotal:undefined}),
   e=>e instanceof PreparationError&&e.code==='INVALID_CHECKOUT_INPUT');
  assert.equal(remote.calls.length,0);
+});
+
+test('I5: provider-required email is verified before creating checkout and releases lock on rejection',async t=>{
+ const f=await planSetup(t),remote=mockProvider('transport');
+ const fetcher=async(u,i)=>{const r=await remote.fetcher(u,i);if(!u.endsWith('/capabilities'))return r;return new Response(JSON.stringify({...await r.json(),requiredCustomerFields:['name','phone','email']}),{status:r.status})};
+ const gateway=createInteropPlanPreparation(f.env,fetcher,{verifySelection:()=>true});
+ await assert.rejects(gateway.prepare(f.id,f.auth,{...f.input,customer:{name:f.input.customer.name,phone:f.input.customer.phone}}),e=>e instanceof PreparationError&&e.code==='REQUIRED_CUSTOMER_FIELD_MISSING');
+ assert.equal((await f.env.DB.prepare('SELECT order_lock FROM jt_plans WHERE id=?').bind(f.id).first()).order_lock,null);assert.ok(remote.calls.every(c=>c.method==='GET'));
 });

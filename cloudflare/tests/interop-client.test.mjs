@@ -69,8 +69,8 @@ test('hotel exclusive and rental inclusive date rules',async()=>{
 });
 test('hold request strips unapproved fields and keeps optional email out when absent',async()=>{
  const m=mockProvider(),c=make(m),id=await offer(c);
- await c.hold({...input(id),unexpected:'secret',customer:{name:'Fixture',phone:'0800000',address:'private'}},KEY);
- const b=m.calls.at(-1).body;assert.equal(b.unexpected,undefined);assert.deepEqual(b.customer,{name:'Fixture',phone:'0800000'});assert.equal(b.notes,undefined);
+ await c.hold({...input(id),unexpected:'secret',customer:{name:'Fixture',phone:'0800000000',address:'private'}},KEY);
+ const b=m.calls.at(-1).body;assert.equal(b.unexpected,undefined);assert.deepEqual(b.customer,{name:'Fixture',phone:'0800000000'});assert.equal(b.notes,undefined);
 });
 test('bad version, wrong provider, draft flat offer, bad currency, oversized response fail closed',async()=>{
  const m=mockProvider(),c=make(m);
@@ -142,4 +142,16 @@ test('canonical offer rejects null price/location, forged simulation, quantity m
  const m=mockProvider();for(const p of [{price:null},{location:null},{simulation:false},{priceType:'REAL'},{quantity:2},{offerId:'x'.repeat(401)}]){
  const c=make({fetcher:async(u,i)=>{const b=await (await m.fetcher(u,i)).json();b.offers[0]={...b.offers[0],...p};return new Response(JSON.stringify(b))}});await assert.rejects(c.offers(query),err(502,'INVALID_PROVIDER_RESPONSE'));
  }
+});
+
+test('official HoldRequest limits reject invalid customer, long offer and notes before network',()=>{
+ const m=mockProvider(),c=make(m);
+ for(const p of [{customer:{name:'X',phone:'0800000000'}},{customer:{name:'Fixture',phone:'123'}},{customer:{name:'Fixture',phone:'0800000000',email:'a'.repeat(121)}},{offerId:'x'.repeat(401)},{notes:'x'.repeat(501)}])assert.throws(()=>c.hold(input('opaque',p),KEY),err(400,'INVALID_REQUEST'));
+ assert.throws(()=>c.getHold('bad/id'),err(400,'INVALID_REQUEST'));assert.equal(m.calls.length,0);
+});
+test('official GET hold accepts null expiry after reservation, rejects missing payment/identity',async()=>{
+ const valid={holdId:'H-1',offerId:'opaque',externalRef:'JT-FIXTURE-01',reservationState:'reserved',paymentState:'unpaid',totalPrice:10000,currency:'IDR',expiresAt:null,voucher:{code:'V-1',note:'simulation'}};
+ const response=body=>make({fetcher:async()=>new Response(JSON.stringify(body))});
+ assert.equal((await response(valid).getHold('H-1')).expiresAt,null);
+ for(const patch of [{paymentState:undefined},{externalRef:undefined},{voucher:undefined},{reservationState:'awaiting_payment',expiresAt:null}])await assert.rejects(response({...valid,...patch}).getHold('H-1'),err(502,'INVALID_PROVIDER_RESPONSE'));
 });

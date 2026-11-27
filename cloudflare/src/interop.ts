@@ -42,7 +42,7 @@ export interface HoldConfirmed {holdId:string; reservationState:'reserved'; paym
 export interface HoldReleased {holdId:string; reservationState:'cancelled'}
 export interface HoldSnapshot {
  holdId:string; reservationState:HoldState; paymentState?:PaymentState; voucher?:Voucher;
- expiresAt?:string; externalRef?:string; offerId?:string; totalPrice?:number; currency?:'IDR';
+ expiresAt:string|null; externalRef:string; offerId:string; totalPrice:number; currency:'IDR';
 }
 type Fetcher = (url:string, init:RequestInit)=>Promise<Response>;
 export interface InteropConfig {
@@ -148,16 +148,20 @@ function parseOffers(x:unknown,provider:ProviderKind,query:URLSearchParams):Offe
  requireShape(new Set(offers.map(a=>a.offerId)).size===offers.length);
  return {provider,generatedAt:utc(o.generatedAt),offers};
 }
+function holdIdentifier(x:unknown):string{const s=str(x);requireShape(/^[A-Za-z0-9_-]{1,100}$/.test(s));return s}
 function holdBody(input:HoldRequest):HoldRequest{
  const o=record(input),c=record(o.customer);requireShape(o.consent===true);
  const customer:HoldRequest['customer']={name:str(c.name),phone:str(c.phone)};
- if(c.email!==undefined)customer.email=str(c.email);
- return {offerId:str(o.offerId),quantity:integer(o.quantity,1),customer,externalRef:external(o.externalRef),consent:true,
- ...(o.notes===undefined?{}:{notes:str(o.notes,true)})};
+ requireShape(customer.name.length>=2&&customer.name.length<=100&&/^[0-9+\- ]{9,20}$/.test(customer.phone));
+ if(c.email!==undefined){customer.email=str(c.email);requireShape(customer.email.length<=120)}
+ const offerId=str(o.offerId);requireShape(offerId.length<=400);
+ const notes=o.notes===undefined?undefined:str(o.notes,true);requireShape(notes===undefined||notes.length<=500);
+ return {offerId,quantity:integer(o.quantity===undefined?1:o.quantity,1),customer,externalRef:external(o.externalRef),consent:true,
+ ...(notes===undefined?{}:{notes})};
 }
 function parseCreated(x:unknown,request:HoldRequest):HoldCreated{
  const o=record(x);requireShape(o.offerId===request.offerId&&o.externalRef===request.externalRef&&o.reservationState==='awaiting_payment');
- return {holdId:str(o.holdId),offerId:request.offerId,externalRef:request.externalRef,reservationState:'awaiting_payment',
+ return {holdId:holdIdentifier(o.holdId),offerId:request.offerId,externalRef:request.externalRef,reservationState:'awaiting_payment',
  paymentState:payment(o.paymentState),totalPrice:integer(o.totalPrice),currency:idr(o.currency),expiresAt:utc(o.expiresAt)};
 }
 function matching(x:unknown,id:string):Record<string,unknown>{const o=record(x);requireShape(o.holdId===id);return o}
@@ -169,14 +173,13 @@ function parseReleased(x:unknown,id:string):HoldReleased{
  const o=matching(x,id);requireShape(o.reservationState==='cancelled');return {holdId:id,reservationState:'cancelled'};
 }
 function parseSnapshot(x:unknown,id:string):HoldSnapshot{
- const o=matching(x,id),result:HoldSnapshot={holdId:id,reservationState:oneOf<HoldState>(o.reservationState,states)};
- if(o.paymentState!==undefined)result.paymentState=payment(o.paymentState);
+ const o=matching(x,id),state=oneOf<HoldState>(o.reservationState,states);
+ const expiresAt=o.expiresAt===null?null:utc(o.expiresAt);
+ requireShape(state!=='awaiting_payment'||expiresAt!==null);
+ const result:HoldSnapshot={holdId:holdIdentifier(id),reservationState:state,paymentState:payment(o.paymentState),
+  externalRef:external(o.externalRef),offerId:str(o.offerId),totalPrice:integer(o.totalPrice),currency:idr(o.currency),expiresAt};
  if(o.voucher!==undefined)result.voucher=voucher(o.voucher);
- if(o.expiresAt!==undefined)result.expiresAt=utc(o.expiresAt);
- if(o.externalRef!==undefined)result.externalRef=external(o.externalRef);
- if(o.offerId!==undefined)result.offerId=str(o.offerId);
- if(o.totalPrice!==undefined)result.totalPrice=integer(o.totalPrice);
- if(o.currency!==undefined)result.currency=idr(o.currency);
+ requireShape(state!=='reserved'||result.voucher!==undefined);
  return result;
 }
 async function boundedJson(response:Response):Promise<unknown>{
@@ -223,7 +226,7 @@ export function createInteropClient(config:InteropConfig){
   };
   try{return await Promise.race([work(),deadline])}finally{clearTimeout(timer!);ctrl.abort()}
  }
- function pathFor(op:Operation,id:string,suffix=''){return local(op,()=>{const s=str(id);requireShape(s.length<=512&&s!=='.'&&s!=='..');return '/holds/'+encodeURIComponent(s)+suffix})}
+ function pathFor(op:Operation,id:string,suffix=''){return local(op,()=>{const s=holdIdentifier(id);return '/holds/'+encodeURIComponent(s)+suffix})}
  function optionalKey(op:Operation,key?:string){if(key!==undefined)local(op,()=>requireShape(typeof key==='string'&&idemPattern.test(key)));return key}
  return Object.freeze({
   capabilities:()=>call('capabilities','/capabilities','GET',[200],x=>parseCapabilities(x,provider)),

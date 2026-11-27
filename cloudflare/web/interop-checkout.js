@@ -127,7 +127,7 @@ function mount(){
     const data=await response.json();
     if(data.verifiedBy!=='D1_JOURNAL'||data.orderId!==id||!STATES.has(data.status)&&data.status!=='NOT_STARTED')
      throw Error('Respons status tidak dapat diverifikasi.');
-    const labels=Array.isArray(data.items)?data.items.map(x=>String(x.provider)+': '+String(x.state)).join(' · '):'';
+    const labels=Array.isArray(data.items)?data.items.map(x=>String(x.provider)+': '+String(x.state)+' (reservasi '+String(x.reservationState??'UNKNOWN')+', bayar '+String(x.paymentState??'UNKNOWN')+')').join(' · '):'';
     statusOut.textContent='D1 journal: '+data.status+'. '+labels+'. Tidak membuktikan pembayaran atau transaksi atomik.';
    }catch(_){statusOut.textContent='Status checkout tidak tersedia atau belum dapat diverifikasi. Jangan mengirim ulang transaksi.'}
    finally{tokenInput.value='';check.disabled=false}

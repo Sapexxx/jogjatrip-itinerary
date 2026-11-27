@@ -37,12 +37,13 @@ async function fixture(t,types=['transport']){
 }
 function fake(kind,opts={}){
  const calls={hold:0,confirm:0,release:0,getHold:0,keys:[]};
- let state='awaiting_payment';
+ let state='awaiting_payment',storedBody;
  const holdId='H-'+kind;
  const client={
   async hold(body,key){
    calls.hold++;calls.keys.push(key);
    if(opts.holdError)throw opts.holdError;
+   storedBody=structuredClone(body);
    return {holdId,offerId:body.offerId,externalRef:body.externalRef,reservationState:'awaiting_payment',
     paymentState:'unpaid',totalPrice:opts.price??10000,currency:'IDR',
     expiresAt:new Date(time+(opts.ttlMs??15*60000)).toISOString()};
@@ -61,7 +62,7 @@ function fake(kind,opts={}){
   },
   async getHold(id){
    calls.getHold++;assert.equal(id,holdId);
-   return {holdId,reservationState:state,paymentState:'unpaid',
+   return {holdId,offerId:storedBody?.offerId,externalRef:storedBody?.externalRef,currency:'IDR',totalPrice:opts.price??10000,expiresAt:state==='reserved'||state==='cancelled'?null:new Date(time+15*60000).toISOString(),reservationState:state,...(opts.omitPayment?{}:{paymentState:'unpaid'}),
     ...(state==='reserved'?{voucher:{code:'V-'+kind,note:'fixture'}}:{})};
   }
  };
@@ -263,4 +264,22 @@ test('I6 mock rehearsal: third CONFIRM definite rejection produces PARTIAL witho
  const ops=await operations(f);
  assert.equal(ops.filter(o=>o.operation==='CONFIRM'&&o.state==='SUCCEEDED').length,2);
  assert.equal(ops.filter(o=>o.operation==='CONFIRM'&&o.state==='REJECTED').length,1);
+});
+
+test('E9 official local rehearsal: second CONFIRM times out, third untouched, reconcile GET only',async t=>{
+ const f=await fixture(t,['hotel','transport','wisata']);
+ const a=fake('hotel'),b=fake('transport',{remoteConfirmed:true,confirmError:error('transport','confirm',504,'UPSTREAM_TIMEOUT')}),c=fake('wisata');
+ const saga=run(f,{hotel:a.client,transport:b.client,wisata:c.client});
+ assert.equal((await saga.hold(f.id,f.token)).status,'AWAITING_CONFIRMATION');
+ assert.equal((await saga.confirm(f.id,f.token)).status,'UNKNOWN');assert.equal(a.calls.confirm,1);assert.equal(b.calls.confirm,1);assert.equal(c.calls.confirm,0);
+ const lock=await f.db.prepare('SELECT fence FROM jt_order_locks WHERE order_id=?').bind(f.id).first();f.advance(1001);
+ assert.equal((await saga.reconcile(f.id,f.token,lock.fence,true)).status,'PARTIAL');assert.equal(b.calls.getHold,1);assert.equal(b.calls.confirm,1);assert.equal(c.calls.confirm,0);
+ assert.equal(a.calls.release+b.calls.release+c.calls.release,0);
+ const ops=await operations(f);assert.equal(ops.filter(o=>o.operation==='CONFIRM'&&o.state==='SUCCEEDED').length,2);
+});
+test('E9 reconciliation does not invent missing payment state',async t=>{
+ const f=await fixture(t),a=fake('transport',{remoteConfirmed:true,omitPayment:true,confirmError:error('transport','confirm',504,'UPSTREAM_TIMEOUT')});const saga=run(f,{transport:a.client});
+ await saga.hold(f.id,f.token);assert.equal((await saga.confirm(f.id,f.token)).status,'UNKNOWN');
+ const lock=await f.db.prepare('SELECT fence FROM jt_order_locks WHERE order_id=?').bind(f.id).first();f.advance(1001);
+ assert.equal((await saga.reconcile(f.id,f.token,lock.fence,true)).status,'UNKNOWN');assert.equal((await operations(f)).find(o=>o.operation==='CONFIRM').state,'UNKNOWN');assert.equal(a.calls.confirm,1);assert.equal(a.calls.release,0);
 });

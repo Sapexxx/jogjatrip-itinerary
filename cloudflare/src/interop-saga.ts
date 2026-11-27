@@ -19,7 +19,7 @@ export interface SagaResult {
 /** Client I1 classifies documented HTTP-status/code pairs; never reclassify
  * unknown remote mutations or idempotency conflicts in the saga. */
 function verifiedReject(e:unknown):e is InteropError {
- return e instanceof InteropError&&!e.outcomeUnknown;
+ return e instanceof InteropError&&!e.outcomeUnknown&&e.code!=='ALREADY_CONFIRMED';
 }
 
 function codeOf(e:unknown){return e instanceof InteropError?e.code:'UPSTREAM_HTTP_ERROR'}
@@ -151,7 +151,8 @@ export function createHoldSaga(journal:Journal,clients:Clients,options:{now?:()=
     const request=await journal.getOperationRequest(proof,op.itemIndex,op.operation);
     try{
      const snapshot=await client(op.provider).getHold(op.holdId);
-     if(snapshot.holdId!==op.holdId)continue;
+     const offer=view.checkout.offers[op.itemIndex];
+     if(snapshot.holdId!==op.holdId||snapshot.externalRef!==view.checkout.externalRef||snapshot.offerId!==offer.offerId||snapshot.currency!=='IDR'||snapshot.totalPrice!==offer.totalPrice)continue;
      if(op.operation==='CONFIRM'&&snapshot.reservationState==='reserved'&&snapshot.voucher&&snapshot.paymentState!==undefined){
       await journal.recordOutcome(proof,op.itemIndex,'CONFIRM',request.operation.revision,
        {state:'SUCCEEDED',result:{holdId:op.holdId,reservationState:'reserved',paymentState:snapshot.paymentState,voucher:snapshot.voucher}});

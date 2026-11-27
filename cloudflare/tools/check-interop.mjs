@@ -85,7 +85,7 @@ const supplemental=[
 const checks=await Promise.all(main);
 const extras=await Promise.all(supplemental);
 const summarize=a=>({total:a.length,passed:a.filter(x=>x.status==='PASS').length,failed:a.filter(x=>x.status==='FAIL').length,skipped:a.filter(x=>x.status==='SKIP').length});
-const readiness={contract:'0.2.0',status:'BLOCKED',reason:'Master contract remains draft; authenticated capabilities, durable provider holds and staging proof not verified. Read-only CRS audit does not establish transaction readiness.'};
+const readiness={contract:'0.2.0',status:'BLOCKED',reason:'Canonical Contract 0.2 is pinned in the repository; authenticated capabilities, durable provider holds and actual E8/E9 staging proof remain unverified. Read-only CRS audit does not establish transaction readiness.'};
 const report={transactionReadiness:readiness,timestamp:new Date().toISOString(),commit:process.env.GITHUB_SHA||null,mode:'READ_ONLY_GET',crsVersion:vocabulary.version,targets:HOSTS,checks,extras,summary:summarize(checks),supplementalSummary:summarize(extras)};
 for(const c of [...checks,...extras])console.log(c.status+' '+c.id+' '+c.title+' | '+c.detail);
 console.log('PR-5 '+JSON.stringify(report.summary)+'; supplemental '+JSON.stringify(report.supplementalSummary));
