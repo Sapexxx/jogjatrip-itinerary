@@ -19,6 +19,11 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Verify canonical source manifest
         run: node tools/check-source-manifest.mjs
+      - name: Install official schema validator dependencies
+        working-directory: tools
+        run: npm ci --no-audit --no-fund
+      - name: Official JSON Schema consumer acceptance (offline fixtures)
+        run: node --experimental-strip-types --test tools/check-consumer-schemas.test.mjs
       - name: Run entire Worker test suite
         working-directory: cloudflare
         run: npm test

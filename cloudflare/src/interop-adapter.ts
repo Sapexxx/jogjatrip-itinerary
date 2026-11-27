@@ -47,9 +47,9 @@ export interface AdapterPolicy {
  resolveResourceId?:(item:Readonly<ServiceItem>)=>string|undefined;
  /** Trusted verification of material choices (room + guest capacity, ticket tier, driver option).
   * Must use authoritative provider evidence, not display-only attributes or a user assertion.
-  * No production verifier exists in I2; absent/false/throw always blocks.
+  * A trusted verifier may use independent provider GET evidence. Absent/false/throw blocks.
   */
- verifySelection?:(item:Readonly<ServiceItem>,offer:Readonly<CanonicalOffer>)=>boolean;
+ verifySelection?:(item:Readonly<ServiceItem>,offer:Readonly<CanonicalOffer>)=>boolean|Promise<boolean>;
  capabilitiesTimeoutMs?:number;
  now?:()=>number;
 }
@@ -165,7 +165,7 @@ export function createProviderAdapter(env:Config,fetcher:Fetcher,policy:AdapterP
   for(const offer of available){
    try{
     const copy=structuredClone(offer);
-    if(opts.verifySelection(Object.freeze({...item}),Object.freeze(copy))===true)verified.push(offer);
+    if(await opts.verifySelection(Object.freeze({...item}),Object.freeze(copy))===true)verified.push(offer);
    }catch{return {ok:false,reason:'SELECTION_UNVERIFIED'}}
   }
   if(!verified.length)return {ok:false,reason:'SELECTION_UNVERIFIED'};
