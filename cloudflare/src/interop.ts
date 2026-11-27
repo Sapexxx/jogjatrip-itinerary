@@ -8,21 +8,25 @@ import vocabulary from '../crs-vocabulary.json' with { type: 'json' };
 export type InteropEntity = 'lodging' | 'tourist_attraction' | 'vehicle_rental';
 export type HoldState = 'awaiting_payment' | 'reserved' | 'cancelled' | 'expired';
 export type PaymentState = 'unpaid' | 'paid' | 'refunded' | 'partially_refunded' | 'expired' | 'not_applicable';
+export type CustomerField='name'|'phone'|'email';
 export interface Capabilities {
  contract: '0.2.0'; provider: ProviderKind; entityTypes: string[]; holds: boolean;
  holdTtlMinutes: number; durableStorage: boolean; location: 'point'|'region';
+ requiredCustomerFields: CustomerField[]; optionalCustomerFields: CustomerField[]; maxQuantity:number;
+ paymentSupported?:boolean; paymentMode?:'none'|'simulated';
 }
 export interface OfferQuery {
  startDate: string; endDate?: string; regionId?: string; lat?: number; lng?: number;
- radiusKm?: number; quantity?: number; limit?: number;
+ radiusKm?: number; quantity?: number; limit?: number; withDriver?:boolean;
 }
 export interface CanonicalOffer {
  offerId: string; provider: ProviderKind; entityType: InteropEntity; resourceId: string;
  regionId: string|null; name: string; description: string; imageUrl: string|null;
- price: number|null; priceUnit: 'night'|'ticket'|'day'|'trip'|'person'; currency: 'IDR';
+ price: number; priceUnit: 'night'|'ticket'|'day'|'trip'|'person'; currency: 'IDR';
  period: {startDate: string; endDate: string}; totalPrice: number;
  available: boolean; remaining: number; location: {lat: number|null; lng: number|null}|null;
  attributes: Record<string,unknown>;
+ expiresAt?:string; quantity?:number; priceType?:'SIMULATED'; simulation?:true;
 }
 export interface Offers {provider: ProviderKind; generatedAt: string; offers: CanonicalOffer[]}
 export interface HoldRequest {
@@ -97,32 +101,49 @@ function queryParams(entity:InteropEntity,input:OfferQuery):URLSearchParams{
  if(o.lat!==undefined)p.set('lat',String(number(o.lat,-90,90)));
  if(o.lng!==undefined)p.set('lng',String(number(o.lng,-180,180)));
  if(o.radiusKm!==undefined)p.set('radiusKm',String(number(o.radiusKm,Number.MIN_VALUE,Number.MAX_VALUE)));
+ if(o.withDriver!==undefined){requireShape(entity==='vehicle_rental');p.set('withDriver',String(bool(o.withDriver)))}
  p.set('quantity',String(o.quantity===undefined?1:integer(o.quantity,1)));
  p.set('limit',String(o.limit===undefined?20:integer(o.limit,1,20)));
  return p;
 }
 function parseCapabilities(x:unknown,provider:ProviderKind):Capabilities{
- const o=record(x);requireShape(o.contract==='0.2.0'&&o.provider===provider&&Array.isArray(o.entityTypes));
- return {contract:'0.2.0',provider,entityTypes:(o.entityTypes as unknown[]).map(v=>str(v)),holds:bool(o.holds),
- holdTtlMinutes:integer(o.holdTtlMinutes,0),durableStorage:bool(o.durableStorage),location:oneOf<'point'|'region'>(o.location,new Set(['point','region']))};
+ const o=record(x);requireShape(o.contract==='0.2.0'&&o.provider===provider&&Array.isArray(o.entityTypes)&&o.entityTypes.length>0);
+ const fields=new Set(['name','phone','email']);
+ function customerFields(value:unknown,fallback:CustomerField[]):CustomerField[]{
+  if(value===undefined)return fallback;
+  requireShape(Array.isArray(value));
+  return [...new Set(value.map(v=>oneOf<CustomerField>(v,fields)))];
+ }
+ return {contract:'0.2.0',provider,entityTypes:(o.entityTypes as unknown[]).map(v=>oneOf<InteropEntity>(v,new Set(Object.values(entityByProvider)))),holds:bool(o.holds),
+ holdTtlMinutes:integer(o.holdTtlMinutes,1),durableStorage:bool(o.durableStorage),location:oneOf<'point'|'region'>(o.location,new Set(['point','region'])),
+ requiredCustomerFields:customerFields(o.requiredCustomerFields,['name','phone']),optionalCustomerFields:customerFields(o.optionalCustomerFields,[]),
+ maxQuantity:o.maxQuantity===undefined?1:integer(o.maxQuantity,1),
+ ...(o.paymentSupported===undefined?{}:{paymentSupported:bool(o.paymentSupported)}),
+ ...(o.paymentMode===undefined?{}:{paymentMode:oneOf<'none'|'simulated'>(o.paymentMode,new Set(['none','simulated']))})};
 }
 function parseOffers(x:unknown,provider:ProviderKind,query:URLSearchParams):Offers{
  const o=record(x),entity=entityByProvider[provider];
  requireShape(o.provider===provider&&Array.isArray(o.offers)&&o.offers.length<=Number(query.get('limit')));
  const offers=(o.offers as unknown[]).map((v):CanonicalOffer=>{
   const a=record(v);requireShape(a.provider===provider&&a.entityType===entity);
-  const p=record(a.period),start=date(p.startDate),end=date(p.endDate);
+  const p=record(a.period),start=date(p.startDate),end=entity==='tourist_attraction'&&(p.endDate===null||p.endDate===undefined)?start:date(p.endDate);
   validPeriod(entity,start,end);requireShape(start===query.get('startDate')&&(entity==='tourist_attraction'||end===query.get('endDate')));
   const region=a.regionId===null?null:str(a.regionId);requireShape(region===null?entity==='vehicle_rental':regions.has(region));
   const image=a.imageUrl===null?null:str(a.imageUrl);if(image!==null){const u=new URL(image);requireShape(u.protocol==='https:'&&!u.username&&!u.password)}
-  const loc=a.location===null?null:record(a.location);
-  const location=loc===null?null:{lat:loc.lat===null?null:number(loc.lat,-90,90),lng:loc.lng===null?null:number(loc.lng,-180,180)};
+  const loc=record(a.location);
+  const location={lat:loc.lat===null?null:number(loc.lat,-90,90),lng:loc.lng===null?null:number(loc.lng,-180,180)};
   const available=bool(a.available),remaining=integer(a.remaining);
   requireShape(!available||remaining>=Number(query.get('quantity')));
-  return {offerId:str(a.offerId),provider,entityType:entity,resourceId:str(a.resourceId),regionId:region,
-   name:str(a.name),description:str(a.description,true),imageUrl:image,price:a.price===null?null:integer(a.price),
+  const offerId=str(a.offerId);requireShape(offerId.length<=400);
+  if(a.quantity!==undefined)requireShape(integer(a.quantity,1)===Number(query.get('quantity')));
+  if(a.priceType!==undefined)requireShape(a.priceType==='SIMULATED');
+  if(a.simulation!==undefined)requireShape(a.simulation===true);
+  return {offerId,provider,entityType:entity,resourceId:str(a.resourceId),regionId:region,
+   name:str(a.name),description:str(a.description,true),imageUrl:image,price:integer(a.price),
    priceUnit:oneOf<CanonicalOffer['priceUnit']>(a.priceUnit,priceUnits),currency:idr(a.currency),
-   period:{startDate:start,endDate:end},totalPrice:integer(a.totalPrice),available,remaining,location,attributes:record(a.attributes)};
+   period:{startDate:start,endDate:end},totalPrice:integer(a.totalPrice),available,remaining,location,attributes:record(a.attributes),
+   ...(a.expiresAt===undefined?{}:{expiresAt:utc(a.expiresAt)}),...(a.quantity===undefined?{}:{quantity:integer(a.quantity,1)}),
+   ...(a.priceType===undefined?{}:{priceType:'SIMULATED' as const}),...(a.simulation===undefined?{}:{simulation:true as const})};
  });
  requireShape(new Set(offers.map(a=>a.offerId)).size===offers.length);
  return {provider,generatedAt:utc(o.generatedAt),offers};

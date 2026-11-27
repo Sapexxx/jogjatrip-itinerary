@@ -13,7 +13,7 @@ const bindings={
  wisata:{url:'WISATA_API_URL',token:'WISATA_PARTNER_TOKEN',entity:'tourist_attraction'},
  transport:{url:'TRANSPORT_API_URL',token:'TRANSPORT_PARTNER_TOKEN',entity:'vehicle_rental'}
 } as const;
-export type CapabilityReason='READY'|'FEATURE_DISABLED'|'MISSING_CONFIGURATION'|'MISSING_TOKEN'|'AUTH_FAILED'|'UNSUPPORTED_ENDPOINT'|'INVALID_CAPABILITIES'|'PROVIDER_UNAVAILABLE'|'HOLDS_UNSUPPORTED'|'DURABILITY_UNVERIFIED'|'ENTITY_UNSUPPORTED'|'INVALID_TTL';
+export type CapabilityReason='READY'|'FEATURE_DISABLED'|'MISSING_CONFIGURATION'|'MISSING_TOKEN'|'AUTH_FAILED'|'UNSUPPORTED_ENDPOINT'|'INVALID_CAPABILITIES'|'PROVIDER_UNAVAILABLE'|'HOLDS_UNSUPPORTED'|'DURABILITY_UNVERIFIED'|'ENTITY_UNSUPPORTED'|'INVALID_TTL'|'QUANTITY_UNSUPPORTED';
 export interface CapabilityResult {
  provider:ProviderKind; eligible:boolean; reason:CapabilityReason;
  capabilities?:Capabilities; httpStatus?:number;
@@ -76,7 +76,7 @@ export function itemToOfferQuery(input:ServiceItem):ItemQuery{
  const item=validatedItem(input);
  if(item.type==='hotel')return {provider:'hotel',entityType:'lodging',query:{startDate:item.checkIn,endDate:item.checkOut,quantity:1,limit:20}};
  if(item.type==='wisata')return {provider:'wisata',entityType:'tourist_attraction',query:{startDate:item.visitDate,quantity:item.quantity,limit:20}};
- return {provider:'transport',entityType:'vehicle_rental',query:{startDate:item.startDate,endDate:item.endDate,quantity:1,limit:20}};
+ return {provider:'transport',entityType:'vehicle_rental',query:{startDate:item.startDate,endDate:item.endDate,quantity:1,limit:20,withDriver:item.withDriver}};
 }
 function snapshotItems(input:readonly ServiceItem[]):ServiceItem[]{
  if(!Array.isArray(input)||input.length===0||input.length>5)throw Error('invalid items');
@@ -134,7 +134,13 @@ export function createProviderAdapter(env:Config,fetcher:Fetcher,policy:AdapterP
   if(!enabled)return decision('BLOCKED','FEATURE_DISABLED');
   // Shared externalRef can currently conflict per provider. No silent truncation or split.
   if(required.length!==items.length)return decision('BLOCKED','DUPLICATE_PROVIDER');
-  const caps=await Promise.all(required.map(detect));
+  const caps=await Promise.all(required.map(async kind=>{
+   const c=await detect(kind);
+   const item=items.find(i=>i.type===kind)!;
+   if(c.eligible&&c.capabilities&&itemToOfferQuery(item).query.quantity!>c.capabilities.maxQuantity)
+    return failure(kind,'QUANTITY_UNSUPPORTED',c.capabilities);
+   return c;
+  }));
   return caps.every(c=>c.eligible)?decision('CONTRACT_0_2','CAPABILITIES_READY',caps):decision('BLOCKED','PROVIDER_NOT_READY',caps);
  }
  async function prepareOffer(item:ServiceItem):Promise<OfferResult>{

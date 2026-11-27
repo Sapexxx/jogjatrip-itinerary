@@ -130,3 +130,16 @@ test('final PR: reservation status cannot be inferred from provider payment stat
  assert.equal(contractPaymentStatus('CONFIRMED'),'UNKNOWN');
  assert.deepEqual(contractState('cancelled','refunded'),{reservationState:'cancelled',paymentState:'refunded'});
 });
+
+test('canonical capabilities preserve customer fields, max quantity and payment mode',async()=>{
+ const m=mockProvider();const c=make({fetcher:async(u,i)=>{const r=await m.fetcher(u,i);return new Response(JSON.stringify({...await r.json(),requiredCustomerFields:['name','email'],optionalCustomerFields:['phone'],maxQuantity:3,paymentMode:'simulated',paymentSupported:true}))}});
+ const cap=await c.capabilities();assert.deepEqual(cap.requiredCustomerFields,['name','email']);assert.deepEqual(cap.optionalCustomerFields,['phone']);assert.equal(cap.maxQuantity,3);assert.equal(cap.paymentMode,'simulated');
+ for(const p of [{holdTtlMinutes:0},{maxQuantity:0},{requiredCustomerFields:['address']},{entityTypes:[]},{paymentMode:'live'}]){
+  const bad=make({fetcher:async(u,i)=>{const r=await m.fetcher(u,i);return new Response(JSON.stringify({...await r.json(),...p}))}});await assert.rejects(bad.capabilities(),err(502,'INVALID_PROVIDER_RESPONSE'));
+ }
+});
+test('canonical offer rejects null price/location, forged simulation, quantity mismatch and oversized offer ID',async()=>{
+ const m=mockProvider();for(const p of [{price:null},{location:null},{simulation:false},{priceType:'REAL'},{quantity:2},{offerId:'x'.repeat(401)}]){
+ const c=make({fetcher:async(u,i)=>{const b=await (await m.fetcher(u,i)).json();b.offers[0]={...b.offers[0],...p};return new Response(JSON.stringify(b))}});await assert.rejects(c.offers(query),err(502,'INVALID_PROVIDER_RESPONSE'));
+ }
+});
