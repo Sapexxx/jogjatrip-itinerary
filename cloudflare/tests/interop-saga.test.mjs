@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 import {createInteropJournal} from '../src/interop-journal.ts';
 import {createHoldSaga} from '../src/interop-saga.ts';
+import {createInteropReadGateway} from '../src/interop-gateway.ts';
 import {InteropError,createInteropClient} from '../src/interop.ts';
 import {mockProvider,TOKEN} from './fixtures/interop-provider.mjs';
 
@@ -287,4 +288,94 @@ test('E9 reconciliation does not invent missing payment state',async t=>{
 test('expired prepared offer blocks all HOLDs before provider mutation',async t=>{
  const f=await fixture(t),a=fake('transport');f.advance(301000);
  const r=await run(f,{transport:a.client}).hold(f.id,f.token);assert.equal(r.status,'BLOCKED');assert.equal(r.reason,'OFFER_EXPIRED');assert.equal(a.calls.hold,0);assert.equal((await operations(f)).length,0);
+});
+
+/** Final E8/E9 acceptance using actual consumer HTTP parsing + synthetic
+ * provider inventory + Miniflare D1. No external network. */
+async function acceptance(t,{rejectAt,priceDrift=false,timeout=false,wrongIdentity=false}={}){
+ const kinds=['hotel','transport','wisata'],f=await fixture(t,kinds);
+ const mocks=Object.fromEntries(kinds.map(k=>[k,mockProvider(k,2)]));
+ const trace=[],clients={},prepared=[];
+ for(const k of kinds){
+  const m=mocks[k];
+  const fetcher=async(u,i)=>{
+   const p=new URL(u).pathname,body=i.body?JSON.parse(i.body):null;
+   trace.push({provider:k,method:i.method,path:p,body});
+   if(k===rejectAt&&p.endsWith('/holds')&&i.method==='POST')
+    return new Response(JSON.stringify({code:'NOT_AVAILABLE',message:'Synthetic quota exhausted before hold'}),{status:409});
+   const r=await m.fetcher(u,i);
+   if(k==='wisata'&&priceDrift&&p.endsWith('/holds')&&i.method==='POST'){
+    const b=await r.json();return new Response(JSON.stringify({...b,totalPrice:b.totalPrice+1}),{status:r.status});
+   }
+   if(k==='transport'&&timeout&&p.endsWith('/confirm')){
+    assert.equal(r.status,200); // remote committed, but its reply is lost
+    return new Promise((resolve,reject)=>{if(i.signal.aborted)reject(Error('aborted'));else i.signal.addEventListener('abort',()=>reject(Error('aborted')),{once:true})});
+   }
+   if(k==='transport'&&wrongIdentity&&i.method==='GET'&&/\/holds\//.test(p)){
+    const b=await r.json();return new Response(JSON.stringify({...b,externalRef:'JT-WRONG'}),{status:r.status});
+   }
+   return r;
+  };
+  clients[k]=createInteropClient({provider:k,baseUrl:'https://'+k+'.fixture.invalid',token:TOKEN,fetcher,timeoutMs:500});
+  const sample=offered(k),o=await clients[k].offers({startDate:sample.period.startDate,endDate:sample.period.endDate,quantity:1});
+  prepared.push({...sample,offerId:o.offers[0].offerId,resourceId:o.offers[0].resourceId,generatedAt:o.generatedAt});
+ }
+ const c=await f.journal.reserveCheckout('checkout_e89_acceptance_0001',access,wanted(kinds),prepared);
+ const id=c.checkout.orderId,saga=run(f,clients),read=()=>createInteropReadGateway(f.db).lookup(id,access);
+ return {...f,id,saga,read,mocks,clients,trace,kinds,ops:async()=>(await f.journal.readJournal(id,access)).operations};
+}
+const mutationTrace=f=>f.trace.filter(x=>x.method==='POST').map(x=>x.provider+':'+(x.path.endsWith('/confirm')?'CONFIRM':x.path.endsWith('/release')?'RELEASE':'HOLD'));
+test('E8 acceptance HTTP+D1: definitive third HOLD rejection releases earlier two, restores stock and proves no reservation',async t=>{
+ const f=await acceptance(t,{rejectAt:'wisata'});
+ assert.equal((await f.saga.hold(f.id,access)).status,'COMPENSATED');
+ assert.deepEqual(mutationTrace(f),['hotel:HOLD','transport:HOLD','wisata:HOLD','transport:RELEASE','hotel:RELEASE']);
+ const ops=await f.ops(),holds=ops.filter(o=>o.operation==='HOLD'&&o.state==='SUCCEEDED');
+ assert.equal(holds.length,2);assert.equal(ops.find(o=>o.provider==='wisata').errorCode,'NOT_AVAILABLE');
+ assert.equal(ops.filter(o=>o.operation==='CONFIRM').length,0);
+ for(const h of holds){const snapshot=await f.clients[h.provider].getHold(h.holdId);assert.equal(snapshot.reservationState,'cancelled');assert.equal(snapshot.externalRef,f.id)}
+ assert.equal(ops.filter(o=>o.operation==='RELEASE'&&o.state==='SUCCEEDED').length,2);
+ assert.equal(ops.find(o=>o.provider==='wisata').holdId,null);
+ for(const m of Object.values(f.mocks))assert.equal(m.remaining(),2);
+ const status=await f.read();assert.equal(status.status,'COMPENSATED');assert.equal(status.paymentVerified,false);
+ assert.deepEqual(status.items.map(x=>x.state),['RELEASED','RELEASED','REJECTED']);
+ assert.ok(f.trace.filter(x=>x.body).every(x=>x.body.externalRef===f.id&&x.body.consent===true));
+});
+test('E8 acceptance HTTP+D1: all three holds created but final price changes; three cancelled GET proofs and restored stock',async t=>{
+ const f=await acceptance(t,{priceDrift:true});
+ assert.equal((await f.saga.hold(f.id,access)).status,'COMPENSATED');
+ assert.deepEqual(mutationTrace(f),['hotel:HOLD','transport:HOLD','wisata:HOLD','wisata:RELEASE','transport:RELEASE','hotel:RELEASE']);
+ const ops=await f.ops(),holds=ops.filter(o=>o.operation==='HOLD'&&o.state==='SUCCEEDED');
+ assert.equal(holds.length,3);
+ for(const h of holds)assert.equal((await f.clients[h.provider].getHold(h.holdId)).reservationState,'cancelled');
+ assert.equal(ops.filter(o=>o.operation==='RELEASE'&&o.state==='SUCCEEDED').length,3);
+ assert.equal(ops.filter(o=>o.operation==='CONFIRM').length,0);
+ for(const m of Object.values(f.mocks))assert.equal(m.remaining(),2);
+ assert.equal((await f.read()).status,'COMPENSATED');
+});
+test('E9 acceptance HTTP+D1: actual client timeout after remote CONFIRM, GET recovery only, third remains held',async t=>{
+ const f=await acceptance(t,{timeout:true});
+ assert.equal((await f.saga.hold(f.id,access)).status,'AWAITING_CONFIRMATION');
+ assert.equal((await f.saga.confirm(f.id,access)).status,'UNKNOWN');
+ assert.deepEqual(mutationTrace(f),['hotel:HOLD','transport:HOLD','wisata:HOLD','hotel:CONFIRM','transport:CONFIRM']);
+ assert.equal((await f.read()).status,'UNKNOWN');
+ const before=await f.ops();assert.equal(before.find(o=>o.provider==='transport'&&o.operation==='CONFIRM').errorCode,'UPSTREAM_TIMEOUT');
+ const lock=await f.db.prepare('SELECT fence FROM jt_order_locks WHERE order_id=?').bind(f.id).first();f.advance(1001);
+ const n=f.trace.length;
+ assert.equal((await f.saga.reconcile(f.id,access,lock.fence,true)).status,'PARTIAL');
+ assert.deepEqual(f.trace.slice(n).map(x=>[x.provider,x.method]),[['transport','GET']]);
+ const after=await f.ops();assert.equal(after.filter(o=>o.operation==='CONFIRM'&&o.state==='SUCCEEDED').length,2);
+ assert.equal(after.filter(o=>o.operation==='RELEASE').length,0);
+ const status=await f.read();assert.equal(status.status,'PARTIAL');assert.equal(status.paymentVerified,false);
+ assert.deepEqual(status.items.map(x=>x.state),['CONFIRMED','CONFIRMED','HELD']);
+ for(const h of after.filter(o=>o.operation==='HOLD')){const snap=await f.clients[h.provider].getHold(h.holdId);assert.equal(snap.reservationState,h.provider==='wisata'?'awaiting_payment':'reserved');assert.equal(snap.paymentState,'unpaid')}
+ for(const m of Object.values(f.mocks))assert.equal(m.remaining(),1);
+ assert.equal(mutationTrace(f).length,5);
+});
+test('E9 acceptance HTTP+D1: mismatched externalRef in recovery GET never resolves UNKNOWN',async t=>{
+ const f=await acceptance(t,{timeout:true,wrongIdentity:true});
+ await f.saga.hold(f.id,access);assert.equal((await f.saga.confirm(f.id,access)).status,'UNKNOWN');
+ const lock=await f.db.prepare('SELECT fence FROM jt_order_locks WHERE order_id=?').bind(f.id).first();f.advance(1001);
+ assert.equal((await f.saga.reconcile(f.id,access,lock.fence,true)).status,'UNKNOWN');
+ assert.equal((await f.read()).status,'UNKNOWN');assert.equal(mutationTrace(f).length,5);
+ assert.equal((await f.ops()).find(o=>o.provider==='transport'&&o.operation==='CONFIRM').state,'UNKNOWN');
 });
