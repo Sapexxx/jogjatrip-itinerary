@@ -69,3 +69,22 @@ Angka manual adalah estimasi berdasarkan urutan klik, bukan pengukuran objektif.
 - `lookupToken (input)`
 
 **Aturan keselamatan:** `BOOKING_ENABLED=false` tetap. Tidak ada panggilan HOLD/CONFIRM, tidak ada token/PII di URL atau storage baru. Source kanonik dan file backend tetap tidak disentuh.
+
+
+## Pelaksanaan UX V4 safe — sebelum/sesudah
+
+Sumber tahap A: estimasi manual **S-A ~17**, **S-B ~10**, **S-C ~12**; sumber ini bukan rekaman browser. **Pengukuran interaksi setelah perubahan belum dijalankan**, sehingga target pengurangan 30% **belum dapat dinyatakan tercapai**.
+
+| Metrik | Sebelum | Sesudah (pengukuran sah) |
+| --- | --- | --- |
+| S-A | ~17 (estimasi manual) | BELUM DIUKUR |
+| S-B | ~10 (estimasi manual) | BELUM DIUKUR |
+| S-C | ~12 (estimasi manual) | BELUM DIUKUR |
+| Kontrol nilai durasi kecil | Select 4 opsi | ChipGroup dari opsi identik |
+| Jumlah wisatawan builder | Native number 1–20 | Stepper 1–20 + sumber number identik |
+| Formulir pelanggan | Tiga konteks berbeda | Perbaikan atribut kontak; penyatuan data masih backlog |
+| Warna | Palet semantik `tokens.css` | Palet tidak diubah |
+| Kontras / Lighthouse setelah perubahan | Bukti lama hanya baseline | MENUNGGU bukti CI pada Draft PR |
+| Satu kontrol per jenis data di semua halaman | Belum | PARSIAL; perlu tinjauan browser |
+
+Pengukuran browser yang konsisten wajib memakai tanggal dan layanan sintetis yang sama; dokumentasikan setiap click/tap/keyboard block. Jangan menyamakan dua estimasi manual dengan dua hasil browser.

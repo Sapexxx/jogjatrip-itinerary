@@ -69,7 +69,7 @@ function messageForDates(config){
  const label=root.document.createElement('small');label.className='ux-date-hint';label.setAttribute('aria-live','polite');
  const host=root.document.getElementById(output)||two?.closest('label')||one.closest('label')||one.parentElement;
  host.append(label);
- const refresh=()=>{if(mode==='visit'){label.textContent='Satu hari kunjungan';return}
+ const refresh=()=>{if(mode==='visit'||mode==='trip'){label.textContent=mode==='visit'?'Satu hari kunjungan':'Tanggal mulai perjalanan';return}
   const days=mode==='lodging'?root.JTUXDates?.nightsBetween(one.value,two?.value):root.JTUXDates?.inclusiveDays(one.value,two?.value);
   label.textContent=days===null||days===undefined?'Pilih tanggal yang valid':mode==='rental'&&days>30?'Maksimum 30 hari':String(days)+(mode==='lodging'?' malam':' hari');
   if(two&&one.value&&mode==='lodging')two.min=root.JTUXDates.addDays(one.value,1)||'';
@@ -82,7 +82,7 @@ function init(){
  for(const id of ['ibNights','nights','guests','v4Duration','v4Budget','exploreRentType','exploreRentDriver'])chips(id);
  for(const id of ['customerPhone','packagePhone','ibPhone'])contact(id);
  messageForDates({start:'exploreRentStart',end:'exploreRentEnd',mode:'rental'});
- messageForDates({start:'tripDate',mode:'visit'});
+ messageForDates({start:'tripDate',mode:'trip'});
 }
 const api=Object.freeze({stepper,chips,contact,messageForDates,init});
 root.JTUXControls=api;

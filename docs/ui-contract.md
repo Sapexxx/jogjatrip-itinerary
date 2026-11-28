@@ -63,3 +63,17 @@ Existing `#ibDays`, day navigation, `data-ib-edit`, `#ibSelected`, booking and q
 
 ## Lampiran UX V4-safe, Tahap A
 Elemen di `index.html` tetap menjadi sumber nilai asli bagi script lama. Komponen enhanced tidak boleh menghapus/merename `id`, `name`, atau `data-*` yang telah dipakai. `integrated.js` dimuat sebagai classic `defer` script. Untuk durasi `ibNights` dan `nights`, hanya gunakan nilai opsi sebenarnya (1, 2, 4, 6). Untuk jumlah wisatawan `ibPeople`, batas lokal 1–20 bukan `maxQuantity` provider.
+
+
+## UX Controls V4 safe (di atas struktur DOM lama)
+
+Semua `id` asli tetap ada di DOM; JavaScript klasik tetap dimuat dalam urutan:
+`date-utils.js`, `controls.js`, `journey-ux.js`, `ux-summary.js`, `ux-dialog.js`, `ux-status.js`, lalu `app.js` dan script lainnya.
+
+Kontrol progresif:
+- `ibPeople`/`packageGuests`: `Stepper` dengan sumber `input[type=number]`.
+- `ibNights`/`nights`: `ChipGroup` yang mempertahankan nilai option 1, 2, 4, 6.
+- `guests` dan dropdown kecil lain: `ChipGroup` tanpa memanipulasi nilai provider.
+- `customerPhone`/`packagePhone`/`ibPhone`: `type=tel`, `inputmode=tel`, `autocomplete=tel`.
+
+Event: user memilih nilai baru pada komponen -> elemen lama menerima `input` dan `change`. Sinkronisasi dari kode lama ke komponen baru hanya terjamin bila kode lama menembakkan event tersebut; perubahan `.value` tanpa event adalah batas yang masih harus diuji pada handoff/prefill.
