@@ -63,7 +63,9 @@ function chips(id){
 }
 function contact(id){
  const el=root.document.getElementById(id);if(!el)return false;
- el.type='tel';el.inputMode='tel';el.autocomplete='tel';el.maxLength=20;el.setAttribute('pattern','[0-9+\\- ]{9,20}');
+ el.type='tel';el.inputMode='tel';el.autocomplete='tel';el.maxLength=20;
+ // The cart/package forms follow their existing provider validation. I5 validates its own stricter checkout format.
+ if(id==='ibPhone')el.setAttribute('pattern','[0-9+ -]{9,20}');
  return true;
 }
 function messageForDates(config){

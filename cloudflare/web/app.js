@@ -149,6 +149,7 @@ function jtApplyPartnerHandoff(){
   $('#exploreRentDriver').value=String(p.withDriver);
    window.JTUXControls?.sync('exploreRentDriver');
   if(p.withDriver&&$('#exploreRentType').value==='motor'){$('#exploreRentType').value='mobil';$('#exploreRentCategory').value='all'}
+   window.JTUXControls?.sync('exploreRentDriver');window.JTUXControls?.sync('exploreRentType');
  }
  if(p.date&&p.endDate){$('#exploreRentStart').value=p.date;$('#exploreRentEnd').value=p.endDate;}
  if(p.withDriver!==undefined||(p.date&&p.endDate)){invalidateExploreRental();loadExploreVehicles();}
@@ -223,6 +224,7 @@ for(const id of ['exploreRentStart','exploreRentEnd','exploreRentType','exploreR
   if(id==='exploreRentStart')$('#exploreRentEnd').min=$('#exploreRentStart').value;
   if(id==='exploreRentType'){$('#exploreRentCategory').value='all';if($('#exploreRentType').value==='motor')$('#exploreRentDriver').value='false'}
   if(id==='exploreRentDriver'&&$('#exploreRentDriver').value==='true'&&$('#exploreRentType').value==='motor'){$('#exploreRentType').value='mobil';$('#exploreRentCategory').value='all'}
+  window.JTUXControls?.sync('exploreRentDriver');window.JTUXControls?.sync('exploreRentType');
   invalidateExploreRental();loadExploreVehicles();
  };
 }

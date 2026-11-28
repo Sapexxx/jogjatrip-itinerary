@@ -14,3 +14,14 @@ test('checkout credential presentation does not change its state machine',()=>{
  assert.match(s,/!preparationEnabled\|\|prep\.busy/);
  assert.match(get('cloudflare-status.js'),/bookingEnabled\s*!==\s*false/);
 });
+
+test('health guard is installed synchronously and fails closed on missing health flags',()=>{
+ const s=get('cloudflare-status.js');
+ assert.match(s,/let bookingAllowed=false/);
+ assert.match(s,/document\.addEventListener\('click'/);
+ assert.ok(s.indexOf("document.addEventListener('click'")<s.indexOf("fetch('/api/health'"));
+ assert.match(s,/button\.disabled=true/);
+ assert.match(s,/bookingEnabled===true/);
+ assert.match(s,/if\(!response\.ok\)/);
+ assert.match(s,/catch\{/);
+});

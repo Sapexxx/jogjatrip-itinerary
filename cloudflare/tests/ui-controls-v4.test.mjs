@@ -40,3 +40,11 @@ test('guest counts use a consistent editable stepper, unlike sparse hotel nights
  assert.match(s,/value\.addEventListener\('change',\(\)=>put\(Number\(value\.value\)\)\)/);
  assert.doesNotMatch(s,/stepper\('ibNights'/);
 });
+
+test('rental dependency switches keep displayed controls synchronized',()=>{
+ const source=readFileSync(new URL('app.js',root),'utf8');
+ assert.match(source,/JTUXControls\?\.sync\('exploreRentType'\)/);
+ assert.match(source,/JTUXControls\?\.sync\('exploreRentDriver'\)/);
+ const controls=readFileSync(new URL('controls.js',root),'utf8');
+ assert.match(controls,/if\(id==='ibPhone'\)/);
+});
