@@ -112,3 +112,16 @@ Gunakan Beranda untuk mencari tiga layanan, Paket untuk inspirasi berbasis katal
 ## Handoff dari Wisata Jogja (prasyarat PR-I5)
 
 Tautan `/?from=wisata&destinationId=101&visitDate=2026-12-10` membuka detail destinasi setelah katalog sukses. ID harus 1–15 digit positif; tanggal kalender dari hari ini sampai 365 hari berikutnya, atau tanggal bawaan bila tidak valid. Pengguna masih harus memilih jam dan menekan Tambahkan ke itinerary. Tidak menambah cart secara otomatis atau melakukan reservasi. Parameter handoff dibersihkan, parameter lainnya dipertahankan. Jika destinasi tidak ditemukan atau katalog gagal, tampilkan pesan. Tautan dari provider lain belum didukung.
+
+
+## Peningkatan keterbacaan UX V4 (uji Draft PR)
+
+Pengguna dapat memilih **Paket Bundling**, **Susun Sendiri**, atau **Satu layanan** pada panduan awal. Tombol tersebut mengarah ke rute yang sudah ada, bukan pemesanan baru. Langkah yang ditampilkan: **Susun → Tinjau → Setujui → Pantau**. Tahap Setujui hanya tersedia jika otorisasi server mengizinkan.
+
+Kontrol tanggal tetap input tanggal native. Pada formulir durasi, nilai preset tetap sama (1, 2, 4, 6 malam). Pada jumlah wisatawan, tombol minus/tambah mengubah jumlah secara bertahap. Angka total hanya ditampilkan sebagai **estimasi simulasi** bila quote tersedia.
+
+Persiapan checkout memberikan pilihan **Salin kode rahasia** dan **Unduh kode rahasia (.txt)**. File yang diunduh berisi kredensial: simpan secara aman dan jangan dibagikan. Kode tidak dimasukkan ke URL atau browser storage oleh fitur unduh. Persetujuan tetap harus diberikan secara eksplisit; status UNKNOWN tidak berarti transaksi pasti gagal.
+
+Label **Reservasi** tidak sama dengan **Pembayaran**. Jika status pembayaran tidak diketahui, aplikasi tidak boleh menyebut pembayaran telah diterima.
+
+Booking tetap dinonaktifkan di konfigurasi production saat ini. Beberapa kemampuan yang dibutuhkan, terutama capabilities provider langsung di frontend dan indikator masa HOLD, belum tersedia. Jangan menganggap halaman ringkasan sebagai bukti stok atau booking.

@@ -1,9 +1,9 @@
 name: Itinerary Jogja UI evidence
 on:
   push:
-    branches: [feat/itinerary-jogja-ui, fix/i0-wisata-handoff, feat/interop-client-0.2]
+    branches: [feat/itinerary-jogja-ui, fix/i0-wisata-handoff, feat/interop-client-0.2, feat/interop-client-i5, feat/interop-i45-hardening, feat/interop-i45-closure, feat/interop-provider-contract-gate, feat/interop-final-itinerary-alignment, integration/final-interop-0.2-reviewed, integration/main-cloudflare-conflict-resolved, feat/final-contract-0.2-compliance]
   pull_request:
-    branches: [cloudflare-deploy]
+    branches: [main, cloudflare-deploy]
     paths:
       - 'cloudflare/web/**'
       - 'cloudflare/tools/ui-*.mjs'
@@ -25,6 +25,8 @@ jobs:
       - name: Check declared design token contrast when present
         run: |
           if [ -f cloudflare/web/tokens.css ]; then python3 scripts/check-contrast.py; fi
+      - name: Check UX CSS tokens
+        run: node cloudflare/tools/check-tokens.mjs
       - name: Capture responsive and interaction evidence with local fixtures
         run: node cloudflare/tools/ui-evidence.mjs
       - uses: actions/upload-artifact@v4

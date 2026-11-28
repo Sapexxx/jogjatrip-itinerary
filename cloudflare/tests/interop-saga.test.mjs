@@ -1,0 +1,381 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
+import {createInteropJournal} from '../src/interop-journal.ts';
+import {createHoldSaga} from '../src/interop-saga.ts';
+import {createInteropReadGateway} from '../src/interop-gateway.ts';
+import {InteropError,createInteropClient} from '../src/interop.ts';
+import {mockProvider,TOKEN} from './fixtures/interop-provider.mjs';
+
+const access='c'.repeat(64),time=Date.parse('2026-12-01T03:00:00Z');
+const items={
+ hotel:{type:'hotel',hotelId:'H-01',roomId:'RM-01',checkIn:'2026-12-12',checkOut:'2026-12-14',guests:2},
+ transport:{type:'transport',vehicleId:'R-01',startDate:'2026-12-12',endDate:'2026-12-14',withDriver:false},
+ wisata:{type:'wisata',destinationId:101,visitDate:'2026-12-13',quantity:1,tier:'base'}
+};
+const wanted=(types)=>({customer:{name:'Synthetic I4 Customer',phone:'0800000000'},consent:true,source:{kind:'cart'},
+ items:types.map(kind=>({item:items[kind],expectedTotal:10000}))});
+function offered(kind,id='opaque-fixture'){
+ return {provider:kind,entityType:kind==='transport'?'vehicle_rental':kind==='hotel'?'lodging':'tourist_attraction',resourceId:kind==='hotel'?'RM-01':kind==='transport'?'R-01':'101',offerId:id,
+ quantity:1,period:{startDate:kind==='wisata'?'2026-12-13':'2026-12-12',endDate:kind==='wisata'?'2026-12-13':'2026-12-14'},
+ totalPrice:10000,currency:'IDR',generatedAt:'2026-12-01T03:00:00Z'};
+}
+const sql=n=>readFileSync(new URL('../migrations/'+n,import.meta.url),'utf8');
+async function fixture(t,types=['transport']){
+ let clock=time;
+ const mf=new Miniflare(convertV4MiniflareOptions({modules:true,
+  script:'export default {fetch(){return new Response("fixture")}}',d1Databases:{DB:'i4-local'}}));
+ t.after(()=>mf.dispose());
+ const db=await mf.getD1Database('DB');
+ for(const n of ['0001_init.sql','0002_interop_holds.sql']){
+  for(const s of sql(n).replace(/^--.*$/gm,'').split(';').map(x=>x.trim()).filter(Boolean))await db.prepare(s).run();
+ }
+ const journal=createInteropJournal(db,{now:()=>clock,leaseMs:1000});
+ const key='checkout_i4_'+types.join('_')+'_0001';
+ const created=await journal.reserveCheckout(key,access,wanted(types),types.map(k=>offered(k)));
+ return {db,journal,id:created.checkout.orderId,token:access,advance:ms=>{clock+=ms},now:()=>clock};
+}
+function fake(kind,opts={}){
+ const calls={hold:0,confirm:0,release:0,getHold:0,keys:[]};
+ let state='awaiting_payment',storedBody;
+ const holdId='H-'+kind;
+ const client={
+  async hold(body,key){
+   calls.hold++;calls.keys.push(key);
+   if(opts.holdError)throw opts.holdError;
+   storedBody=structuredClone(body);
+   return {holdId,offerId:body.offerId,externalRef:body.externalRef,reservationState:'awaiting_payment',
+    paymentState:'unpaid',totalPrice:opts.price??10000,currency:'IDR',
+    expiresAt:new Date(time+(opts.ttlMs??15*60000)).toISOString()};
+  },
+  async confirm(id,key){
+   calls.confirm++;calls.keys.push(key);
+   if(opts.confirmError){if(opts.remoteConfirmed)state='reserved';throw opts.confirmError}
+   assert.equal(id,holdId);state='reserved';
+   return {holdId,reservationState:'reserved',paymentState:'unpaid',voucher:{code:'V-'+kind,note:'fixture'}};
+  },
+  async release(id,key){
+   calls.release++;calls.keys.push(key);
+   if(opts.releaseError)throw opts.releaseError;
+   assert.equal(id,holdId);state='cancelled';
+   return {holdId,reservationState:'cancelled'};
+  },
+  async getHold(id){
+   calls.getHold++;assert.equal(id,holdId);
+   return {holdId,offerId:storedBody?.offerId,externalRef:storedBody?.externalRef,currency:'IDR',totalPrice:opts.price??10000,expiresAt:state==='reserved'||state==='cancelled'?null:new Date(time+15*60000).toISOString(),reservationState:state,...(opts.omitPayment?{}:{paymentState:'unpaid'}),
+    ...(state==='reserved'?{voucher:{code:'V-'+kind,note:'fixture'}}:{})};
+  }
+ };
+ return {client,calls};
+}
+const error=(provider,operation,status,code,unknown=true)=>new InteropError(provider,operation,status,code,unknown);
+const run=(f,clients,minTtlMs=60000)=>createHoldSaga(f.journal,clients,{now:f.now,minTtlMs,authorizeRecovery:async()=>true,authorizeHold:async()=>true,authorizeConfirm:async()=>true});
+async function operations(f){return (await f.journal.readJournal(f.id,f.token)).operations}
+
+test('I4: all holds recorded, explicit confirm, no payment inference',async t=>{
+ const f=await fixture(t,['transport','wisata']),a=fake('transport'),b=fake('wisata'),s=run(f,{transport:a.client,wisata:b.client});
+ const h=await s.hold(f.id,f.token);
+ assert.equal(h.status,'AWAITING_CONFIRMATION');assert.equal(h.completed,2);
+ const c=await s.confirm(f.id,f.token);assert.equal(c.status,'CONFIRMED');assert.equal(c.completed,2);
+ assert.equal(a.calls.hold,1);assert.equal(b.calls.hold,1);assert.equal(a.calls.confirm,1);assert.equal(b.calls.confirm,1);
+ assert.equal((await operations(f)).filter(o=>o.state==='SUCCEEDED').length,4);
+ assert.equal((await s.confirm(f.id,f.token)).status,'BLOCKED');
+});
+test('I4: definitive second hold rejection reverses first hold',async t=>{
+ const f=await fixture(t,['transport','wisata']),a=fake('transport'),b=fake('wisata',{holdError:error('wisata','hold',409,'NOT_AVAILABLE',false)});
+ const r=await run(f,{transport:a.client,wisata:b.client}).hold(f.id,f.token);
+ assert.equal(r.status,'COMPENSATED');assert.equal(a.calls.release,1);assert.equal(b.calls.release,0);
+ assert.deepEqual((await operations(f)).map(o=>o.operation+':'+o.state),['HOLD:SUCCEEDED','RELEASE:SUCCEEDED','HOLD:REJECTED']);
+});
+test('I4: ambiguous second hold must not compensate or retry',async t=>{
+ const f=await fixture(t,['transport','wisata']),a=fake('transport'),b=fake('wisata',{holdError:error('wisata','hold',504,'UPSTREAM_TIMEOUT')});
+ const s=run(f,{transport:a.client,wisata:b.client});
+ const r=await s.hold(f.id,f.token);
+ assert.equal(r.status,'UNKNOWN');assert.equal(a.calls.release,0);assert.equal(b.calls.hold,1);
+ assert.equal((await operations(f)).find(o=>o.provider==='wisata').state,'UNKNOWN');
+ await assert.rejects(s.hold(f.id,f.token));
+ assert.equal(b.calls.hold,1);
+});
+test('I4: changed provider price is recorded then compensated',async t=>{
+ const f=await fixture(t),a=fake('transport',{price:12000}),s=run(f,{transport:a.client});
+ const r=await s.hold(f.id,f.token);assert.equal(r.status,'COMPENSATED');
+ assert.equal(a.calls.release,1);
+ assert.equal((await operations(f)).find(o=>o.operation==='HOLD').result.totalPrice,12000);
+});
+test('I4: short hold TTL triggers compensation',async t=>{
+ const f=await fixture(t),a=fake('transport',{ttlMs:30000});
+ const r=await run(f,{transport:a.client}).hold(f.id,f.token);
+ assert.equal(r.status,'COMPENSATED');assert.equal(a.calls.release,1);
+});
+test('I4: unknown compensation stops without claiming rollback',async t=>{
+ const f=await fixture(t),a=fake('transport',{price:12000,releaseError:error('transport','release',504,'UPSTREAM_TIMEOUT')});
+ const r=await run(f,{transport:a.client}).hold(f.id,f.token);
+ assert.equal(r.status,'UNKNOWN');assert.equal(a.calls.release,1);
+ assert.equal((await operations(f)).find(o=>o.operation==='RELEASE').state,'UNKNOWN');
+});
+test('I4: confirm blocked before hold and after inadequate remaining TTL',async t=>{
+ const f=await fixture(t),a=fake('transport');
+ const s=run(f,{transport:a.client});
+ assert.equal((await s.confirm(f.id,f.token)).status,'BLOCKED');
+ assert.equal(a.calls.confirm,0);
+ await s.hold(f.id,f.token);f.advance(14*60000);
+ assert.equal((await s.confirm(f.id,f.token)).status,'BLOCKED');
+ assert.equal(a.calls.confirm,0);
+});
+test('I4: partial definitive confirm cannot be falsely reported confirmed',async t=>{
+ const f=await fixture(t,['transport','wisata']),a=fake('transport'),b=fake('wisata',{confirmError:error('wisata','confirm',409,'HOLD_EXPIRED',false)});
+ const s=run(f,{transport:a.client,wisata:b.client});
+ assert.equal((await s.hold(f.id,f.token)).status,'AWAITING_CONFIRMATION');
+ const r=await s.confirm(f.id,f.token);
+ assert.equal(r.status,'PARTIAL');assert.equal(r.completed,1);
+ assert.equal(a.calls.release,0);
+ assert.equal((await operations(f)).find(o=>o.provider==='wisata'&&o.operation==='CONFIRM').state,'REJECTED');
+});
+test('I4: unknown confirm reconciles by read-only GET after quiescence',async t=>{
+ const f=await fixture(t),a=fake('transport',{remoteConfirmed:true,confirmError:error('transport','confirm',504,'UPSTREAM_TIMEOUT')});
+ const s=run(f,{transport:a.client});
+ await s.hold(f.id,f.token);
+ const r=await s.confirm(f.id,f.token);assert.equal(r.status,'UNKNOWN');
+ const lock=await f.db.prepare('SELECT fence FROM jt_order_locks WHERE order_id=?').bind(f.id).first();
+ f.advance(1001);
+ const recovered=await s.reconcile(f.id,f.token,lock.fence,true);
+ assert.equal(recovered.reason,'RECONCILED_VERIFY_FINAL_ORDER');
+ assert.equal(a.calls.getHold,1);assert.equal(a.calls.confirm,1);
+ assert.equal((await operations(f)).find(o=>o.operation==='CONFIRM').state,'SUCCEEDED');
+});
+test('I4: unresolved hold without known remote hold id stays manual',async t=>{
+ const f=await fixture(t),a=fake('transport',{holdError:error('transport','hold',504,'UPSTREAM_TIMEOUT')});
+ const s=run(f,{transport:a.client});
+ assert.equal((await s.hold(f.id,f.token)).status,'UNKNOWN');
+ const lock=await f.db.prepare('SELECT fence FROM jt_order_locks WHERE order_id=?').bind(f.id).first();
+ f.advance(1001);
+ await assert.rejects(s.reconcile(f.id,f.token,lock.fence,false));
+ const r=await s.reconcile(f.id,f.token,lock.fence,true);
+ assert.equal(r.status,'UNKNOWN');assert.equal(a.calls.getHold,0);
+});
+test('I4: real I1 client fixture executes exact-key hold then confirm without stock duplication',async t=>{
+ const f=await fixture(t),mock=mockProvider('transport',2);
+ const client=createInteropClient({provider:'transport',baseUrl:'https://fixture.invalid',token:TOKEN,fetcher:mock.fetcher});
+ const offerResponse=await client.offers({startDate:'2026-12-12',endDate:'2026-12-14'});
+ const id=offerResponse.offers[0].offerId;
+ const checkout=await f.journal.reserveCheckout('checkout_i4_real_fixture_0001',access,wanted(['transport']),[offered('transport',id)]);
+ const saga=run(f,{transport:client});
+ assert.equal((await saga.hold(checkout.checkout.orderId,access)).status,'AWAITING_CONFIRMATION');
+ assert.equal(mock.remaining(),1);
+ assert.equal((await saga.confirm(checkout.checkout.orderId,access)).status,'CONFIRMED');
+ assert.equal(mock.remaining(),1);
+});
+test('I4: module has no production route wiring and feature flag remains off',()=>{
+ for(const p of ['index.ts','orders.ts','provider.ts','plans.ts','packages.ts','db.ts']){
+  assert.doesNotMatch(readFileSync(new URL('../src/'+p,import.meta.url),'utf8'),/from\s+['"][^'"]*interop-saga\.ts/);
+ }
+ assert.match(readFileSync(new URL('../wrangler.jsonc',import.meta.url),'utf8'),/"BOOKING_ENABLED"\s*:\s*"false"/);
+});
+
+test('I4 recovery: operator authorization callback required before any D1 lock takeover',async t=>{
+ const f=await fixture(t),a=fake('transport',{holdError:error('transport','hold',504,'UPSTREAM_TIMEOUT')});
+ const ordinary=createHoldSaga(f.journal,{transport:a.client},{now:f.now,minTtlMs:60000,authorizeHold:async()=>true});
+ assert.equal((await ordinary.hold(f.id,f.token)).status,'UNKNOWN');
+ const lock=await f.db.prepare('SELECT fence FROM jt_order_locks WHERE order_id=?').bind(f.id).first();
+ f.advance(1001);
+ await assert.rejects(ordinary.reconcile(f.id,f.token,lock.fence,true),/OPERATOR_AUTH_REQUIRED/);
+ const denied=createHoldSaga(f.journal,{transport:a.client},{now:f.now,authorizeRecovery:async()=>false});
+ await assert.rejects(denied.reconcile(f.id,f.token,lock.fence,true),/OPERATOR_AUTH_REQUIRED/);
+ assert.equal((await f.db.prepare('SELECT fence FROM jt_order_locks WHERE order_id=?').bind(f.id).first()).fence,lock.fence);
+ assert.equal(a.calls.getHold,0);
+});
+
+test('I4 mutation policies: no trusted server approval means no remote call or D1 operation',async t=>{
+ const f=await fixture(t),a=fake('transport');
+ const defaultDenied=createHoldSaga(f.journal,{transport:a.client},{now:f.now});
+ await assert.rejects(defaultDenied.hold(f.id,f.token),/HOLD_POLICY_REQUIRED/);
+ assert.equal(a.calls.hold,0);
+ const allowedHold=createHoldSaga(f.journal,{transport:a.client},{now:f.now,minTtlMs:60000,authorizeHold:async()=>true});
+ assert.equal((await allowedHold.hold(f.id,f.token)).status,'AWAITING_CONFIRMATION');
+ await assert.rejects(defaultDenied.confirm(f.id,f.token),/CONFIRM_POLICY_REQUIRED/);
+ const deniedConfirm=createHoldSaga(f.journal,{transport:a.client},{now:f.now,authorizeConfirm:async()=>false});
+ await assert.rejects(deniedConfirm.confirm(f.id,f.token),/CONFIRM_POLICY_REQUIRED/);
+ assert.equal(a.calls.confirm,0);
+ assert.equal((await f.db.prepare("SELECT COUNT(*) AS n FROM jt_interop_operations WHERE operation='CONFIRM'").first()).n,0);
+});
+
+test('final PR: documented rejection after earlier HOLD compensates; unknown code must not release',async t=>{
+ for(const [status,code,unknown] of [[400,'INVALID_CUSTOMER',false],[400,'INVALID_QUANTITY',false],[415,'UNSUPPORTED_MEDIA_TYPE',false],[503,'INTEROP_NOT_CONFIGURED',false],[503,'UPSTREAM_BUSY',true],[409,'IDEMPOTENCY_CONFLICT',true]]){
+  const f=await fixture(t,['transport','wisata']);
+  const a=fake('transport'),b=fake('wisata',{holdError:error('wisata','hold',status,code,unknown)});
+  const r=await run(f,{transport:a.client,wisata:b.client}).hold(f.id,f.token);
+  assert.equal(r.status,unknown?'UNKNOWN':'COMPENSATED',code);
+  assert.equal(a.calls.release,unknown?0:1,code);
+  assert.equal(b.calls.hold,1,code);
+ }
+});
+
+test('final PR staging rehearsal: all 3 synthetic providers HOLD before any CONFIRM, one shared externalRef',async t=>{
+ const types=['hotel','wisata','transport'],f=await fixture(t,types);
+ const providers=Object.fromEntries(types.map(k=>[k,fake(k)]));
+ const order=[],clients=Object.fromEntries(types.map(k=>[k,{
+  ...providers[k].client,
+  hold:async(body,key)=>{order.push('HOLD:'+k);assert.equal(body.externalRef,f.id);return providers[k].client.hold(body,key)},
+  confirm:async(id,key)=>{order.push('CONFIRM:'+k);return providers[k].client.confirm(id,key)}
+ }]));
+ const s=run(f,clients);
+ assert.equal((await s.hold(f.id,f.token)).status,'AWAITING_CONFIRMATION');
+ assert.deepEqual(order,['HOLD:hotel','HOLD:wisata','HOLD:transport']);
+ assert.equal((await s.confirm(f.id,f.token)).status,'CONFIRMED');
+ assert.deepEqual(order,['HOLD:hotel','HOLD:wisata','HOLD:transport','CONFIRM:hotel','CONFIRM:wisata','CONFIRM:transport']);
+ assert.equal((await operations(f)).filter(x=>x.state==='SUCCEEDED').length,6);
+});
+test('final PR staging rehearsal: third provider definitive HOLD failure compensates first two in reverse order',async t=>{
+ const f=await fixture(t,['hotel','wisata','transport']);
+ const hotel=fake('hotel'),wisata=fake('wisata'),transport=fake('transport',{holdError:error('transport','hold',400,'INVALID_CUSTOMER',false)});
+ const sequence=[],wrap=(kind,c)=>({...c,release:async(id,key)=>{sequence.push(kind);return c.release(id,key)}});
+ const s=run(f,{hotel:wrap('hotel',hotel.client),wisata:wrap('wisata',wisata.client),transport:transport.client});
+ assert.equal((await s.hold(f.id,f.token)).status,'COMPENSATED');
+ assert.deepEqual(sequence,['wisata','hotel']);
+ assert.equal(hotel.calls.confirm+wisata.calls.confirm+transport.calls.confirm,0);
+ assert.equal((await operations(f)).filter(o=>o.operation==='RELEASE'&&o.state==='SUCCEEDED').length,2);
+});
+
+test('I6 mock rehearsal: UNKNOWN at third HOLD keeps two earlier holds and forbids CONFIRM/release',async t=>{
+ const f=await fixture(t,['hotel','wisata','transport']);
+ const hotel=fake('hotel'),wisata=fake('wisata');
+ const transport=fake('transport',{holdError:error('transport','hold',504,'UPSTREAM_TIMEOUT',true)});
+ const s=run(f,{hotel:hotel.client,wisata:wisata.client,transport:transport.client});
+ const result=await s.hold(f.id,f.token);
+ assert.equal(result.status,'UNKNOWN');
+ assert.equal(hotel.calls.hold,1);assert.equal(wisata.calls.hold,1);assert.equal(transport.calls.hold,1);
+ assert.equal(hotel.calls.release+wisata.calls.release+transport.calls.release,0);
+ assert.equal(hotel.calls.confirm+wisata.calls.confirm+transport.calls.confirm,0);
+ await assert.rejects(s.confirm(f.id,f.token),e=>e?.code==='ORDER_LOCKED');
+ assert.equal((await operations(f)).filter(o=>o.state==='UNKNOWN').length,1);
+});
+test('I6 mock rehearsal: third CONFIRM definite rejection produces PARTIAL without automatic compensation',async t=>{
+ const f=await fixture(t,['hotel','wisata','transport']);
+ const hotel=fake('hotel'),wisata=fake('wisata');
+ const transport=fake('transport',{confirmError:error('transport','confirm',409,'HOLD_EXPIRED',false)});
+ const s=run(f,{hotel:hotel.client,wisata:wisata.client,transport:transport.client});
+ assert.equal((await s.hold(f.id,f.token)).status,'AWAITING_CONFIRMATION');
+ const result=await s.confirm(f.id,f.token);
+ assert.equal(result.status,'PARTIAL');
+ assert.equal(result.completed,2);
+ assert.equal(hotel.calls.confirm,1);assert.equal(wisata.calls.confirm,1);assert.equal(transport.calls.confirm,1);
+ assert.equal(hotel.calls.release+wisata.calls.release+transport.calls.release,0);
+ assert.equal((await s.confirm(f.id,f.token)).status,'BLOCKED');
+ const ops=await operations(f);
+ assert.equal(ops.filter(o=>o.operation==='CONFIRM'&&o.state==='SUCCEEDED').length,2);
+ assert.equal(ops.filter(o=>o.operation==='CONFIRM'&&o.state==='REJECTED').length,1);
+});
+
+test('E9 official local rehearsal: second CONFIRM times out, third untouched, reconcile GET only',async t=>{
+ const f=await fixture(t,['hotel','transport','wisata']);
+ const a=fake('hotel'),b=fake('transport',{remoteConfirmed:true,confirmError:error('transport','confirm',504,'UPSTREAM_TIMEOUT')}),c=fake('wisata');
+ const saga=run(f,{hotel:a.client,transport:b.client,wisata:c.client});
+ assert.equal((await saga.hold(f.id,f.token)).status,'AWAITING_CONFIRMATION');
+ assert.equal((await saga.confirm(f.id,f.token)).status,'UNKNOWN');assert.equal(a.calls.confirm,1);assert.equal(b.calls.confirm,1);assert.equal(c.calls.confirm,0);
+ const lock=await f.db.prepare('SELECT fence FROM jt_order_locks WHERE order_id=?').bind(f.id).first();f.advance(1001);
+ assert.equal((await saga.reconcile(f.id,f.token,lock.fence,true)).status,'PARTIAL');assert.equal(b.calls.getHold,1);assert.equal(b.calls.confirm,1);assert.equal(c.calls.confirm,0);
+ assert.equal(a.calls.release+b.calls.release+c.calls.release,0);
+ const ops=await operations(f);assert.equal(ops.filter(o=>o.operation==='CONFIRM'&&o.state==='SUCCEEDED').length,2);
+});
+test('E9 reconciliation does not invent missing payment state',async t=>{
+ const f=await fixture(t),a=fake('transport',{remoteConfirmed:true,omitPayment:true,confirmError:error('transport','confirm',504,'UPSTREAM_TIMEOUT')});const saga=run(f,{transport:a.client});
+ await saga.hold(f.id,f.token);assert.equal((await saga.confirm(f.id,f.token)).status,'UNKNOWN');
+ const lock=await f.db.prepare('SELECT fence FROM jt_order_locks WHERE order_id=?').bind(f.id).first();f.advance(1001);
+ assert.equal((await saga.reconcile(f.id,f.token,lock.fence,true)).status,'UNKNOWN');assert.equal((await operations(f)).find(o=>o.operation==='CONFIRM').state,'UNKNOWN');assert.equal(a.calls.confirm,1);assert.equal(a.calls.release,0);
+});
+
+test('expired prepared offer blocks all HOLDs before provider mutation',async t=>{
+ const f=await fixture(t),a=fake('transport');f.advance(301000);
+ const r=await run(f,{transport:a.client}).hold(f.id,f.token);assert.equal(r.status,'BLOCKED');assert.equal(r.reason,'OFFER_EXPIRED');assert.equal(a.calls.hold,0);assert.equal((await operations(f)).length,0);
+});
+
+/** Final E8/E9 acceptance using actual consumer HTTP parsing + synthetic
+ * provider inventory + Miniflare D1. No external network. */
+async function acceptance(t,{rejectAt,priceDrift=false,timeout=false,wrongIdentity=false}={}){
+ const kinds=['hotel','transport','wisata'],f=await fixture(t,kinds);
+ const mocks=Object.fromEntries(kinds.map(k=>[k,mockProvider(k,2)]));
+ const trace=[],clients={},prepared=[];
+ for(const k of kinds){
+  const m=mocks[k];
+  const fetcher=async(u,i)=>{
+   const p=new URL(u).pathname,body=i.body?JSON.parse(i.body):null;
+   trace.push({provider:k,method:i.method,path:p,body});
+   if(k===rejectAt&&p.endsWith('/holds')&&i.method==='POST')
+    return new Response(JSON.stringify({code:'NOT_AVAILABLE',message:'Synthetic quota exhausted before hold'}),{status:409});
+   const r=await m.fetcher(u,i);
+   if(k==='wisata'&&priceDrift&&p.endsWith('/holds')&&i.method==='POST'){
+    const b=await r.json();return new Response(JSON.stringify({...b,totalPrice:b.totalPrice+1}),{status:r.status});
+   }
+   if(k==='transport'&&timeout&&p.endsWith('/confirm')){
+    assert.equal(r.status,200); // remote committed, but its reply is lost
+    return new Promise((resolve,reject)=>{if(i.signal.aborted)reject(Error('aborted'));else i.signal.addEventListener('abort',()=>reject(Error('aborted')),{once:true})});
+   }
+   if(k==='transport'&&wrongIdentity&&i.method==='GET'&&/\/holds\//.test(p)){
+    const b=await r.json();return new Response(JSON.stringify({...b,externalRef:'JT-WRONG'}),{status:r.status});
+   }
+   return r;
+  };
+  clients[k]=createInteropClient({provider:k,baseUrl:'https://'+k+'.fixture.invalid',token:TOKEN,fetcher,timeoutMs:500});
+  const sample=offered(k),o=await clients[k].offers({startDate:sample.period.startDate,endDate:sample.period.endDate,quantity:1});
+  prepared.push({...sample,offerId:o.offers[0].offerId,resourceId:o.offers[0].resourceId,generatedAt:o.generatedAt});
+ }
+ const c=await f.journal.reserveCheckout('checkout_e89_acceptance_0001',access,wanted(kinds),prepared);
+ const id=c.checkout.orderId,saga=run(f,clients),read=()=>createInteropReadGateway(f.db).lookup(id,access);
+ return {...f,id,saga,read,mocks,clients,trace,kinds,ops:async()=>(await f.journal.readJournal(id,access)).operations};
+}
+const mutationTrace=f=>f.trace.filter(x=>x.method==='POST').map(x=>x.provider+':'+(x.path.endsWith('/confirm')?'CONFIRM':x.path.endsWith('/release')?'RELEASE':'HOLD'));
+test('E8 acceptance HTTP+D1: definitive third HOLD rejection releases earlier two, restores stock and proves no reservation',async t=>{
+ const f=await acceptance(t,{rejectAt:'wisata'});
+ assert.equal((await f.saga.hold(f.id,access)).status,'COMPENSATED');
+ assert.deepEqual(mutationTrace(f),['hotel:HOLD','transport:HOLD','wisata:HOLD','transport:RELEASE','hotel:RELEASE']);
+ const ops=await f.ops(),holds=ops.filter(o=>o.operation==='HOLD'&&o.state==='SUCCEEDED');
+ assert.equal(holds.length,2);assert.equal(ops.find(o=>o.provider==='wisata').errorCode,'NOT_AVAILABLE');
+ assert.equal(ops.filter(o=>o.operation==='CONFIRM').length,0);
+ for(const h of holds){const snapshot=await f.clients[h.provider].getHold(h.holdId);assert.equal(snapshot.reservationState,'cancelled');assert.equal(snapshot.externalRef,f.id)}
+ assert.equal(ops.filter(o=>o.operation==='RELEASE'&&o.state==='SUCCEEDED').length,2);
+ assert.equal(ops.find(o=>o.provider==='wisata').holdId,null);
+ for(const m of Object.values(f.mocks))assert.equal(m.remaining(),2);
+ const status=await f.read();assert.equal(status.status,'COMPENSATED');assert.equal(status.paymentVerified,false);
+ assert.deepEqual(status.items.map(x=>x.state),['RELEASED','RELEASED','REJECTED']);
+ assert.ok(f.trace.filter(x=>x.body).every(x=>x.body.externalRef===f.id&&x.body.consent===true));
+});
+test('E8 acceptance HTTP+D1: all three holds created but final price changes; three cancelled GET proofs and restored stock',async t=>{
+ const f=await acceptance(t,{priceDrift:true});
+ assert.equal((await f.saga.hold(f.id,access)).status,'COMPENSATED');
+ assert.deepEqual(mutationTrace(f),['hotel:HOLD','transport:HOLD','wisata:HOLD','wisata:RELEASE','transport:RELEASE','hotel:RELEASE']);
+ const ops=await f.ops(),holds=ops.filter(o=>o.operation==='HOLD'&&o.state==='SUCCEEDED');
+ assert.equal(holds.length,3);
+ for(const h of holds)assert.equal((await f.clients[h.provider].getHold(h.holdId)).reservationState,'cancelled');
+ assert.equal(ops.filter(o=>o.operation==='RELEASE'&&o.state==='SUCCEEDED').length,3);
+ assert.equal(ops.filter(o=>o.operation==='CONFIRM').length,0);
+ for(const m of Object.values(f.mocks))assert.equal(m.remaining(),2);
+ assert.equal((await f.read()).status,'COMPENSATED');
+});
+test('E9 acceptance HTTP+D1: actual client timeout after remote CONFIRM, GET recovery only, third remains held',async t=>{
+ const f=await acceptance(t,{timeout:true});
+ assert.equal((await f.saga.hold(f.id,access)).status,'AWAITING_CONFIRMATION');
+ assert.equal((await f.saga.confirm(f.id,access)).status,'UNKNOWN');
+ assert.deepEqual(mutationTrace(f),['hotel:HOLD','transport:HOLD','wisata:HOLD','hotel:CONFIRM','transport:CONFIRM']);
+ assert.equal((await f.read()).status,'UNKNOWN');
+ const before=await f.ops();assert.equal(before.find(o=>o.provider==='transport'&&o.operation==='CONFIRM').errorCode,'UPSTREAM_TIMEOUT');
+ const lock=await f.db.prepare('SELECT fence FROM jt_order_locks WHERE order_id=?').bind(f.id).first();f.advance(1001);
+ const n=f.trace.length;
+ assert.equal((await f.saga.reconcile(f.id,access,lock.fence,true)).status,'PARTIAL');
+ assert.deepEqual(f.trace.slice(n).map(x=>[x.provider,x.method]),[['transport','GET']]);
+ const after=await f.ops();assert.equal(after.filter(o=>o.operation==='CONFIRM'&&o.state==='SUCCEEDED').length,2);
+ assert.equal(after.filter(o=>o.operation==='RELEASE').length,0);
+ const status=await f.read();assert.equal(status.status,'PARTIAL');assert.equal(status.paymentVerified,false);
+ assert.deepEqual(status.items.map(x=>x.state),['CONFIRMED','CONFIRMED','HELD']);
+ for(const h of after.filter(o=>o.operation==='HOLD')){const snap=await f.clients[h.provider].getHold(h.holdId);assert.equal(snap.reservationState,h.provider==='wisata'?'awaiting_payment':'reserved');assert.equal(snap.paymentState,'unpaid')}
+ for(const m of Object.values(f.mocks))assert.equal(m.remaining(),1);
+ assert.equal(mutationTrace(f).length,5);
+});
+test('E9 acceptance HTTP+D1: mismatched externalRef in recovery GET never resolves UNKNOWN',async t=>{
+ const f=await acceptance(t,{timeout:true,wrongIdentity:true});
+ await f.saga.hold(f.id,access);assert.equal((await f.saga.confirm(f.id,access)).status,'UNKNOWN');
+ const lock=await f.db.prepare('SELECT fence FROM jt_order_locks WHERE order_id=?').bind(f.id).first();f.advance(1001);
+ assert.equal((await f.saga.reconcile(f.id,access,lock.fence,true)).status,'UNKNOWN');
+ assert.equal((await f.read()).status,'UNKNOWN');assert.equal(mutationTrace(f).length,5);
+ assert.equal((await f.ops()).find(o=>o.provider==='transport'&&o.operation==='CONFIRM').state,'UNKNOWN');
+});

@@ -41,3 +41,32 @@ test('invalid date preserves default; open dialog is never replaced',()=>{
  const y=create();y.dialog.open=true;y.run('jtInitWisataHandoff()');assert.equal(y.opened.length,0);assert.equal(y.messages.length,1);
 });
 test('unrelated source leaves URL and DOM untouched',()=>{const x=create('https://local.test/?from=jogjatrans&destinationId=101');x.run('jtInitWisataHandoff()');assert.deepEqual(x.replaced,[]);assert.deepEqual(x.opened,[]);assert.deepEqual(x.messages,[])});
+
+const parsePartner=search=>JSON.parse(JSON.stringify(create().run('jtParsePartnerHandoff('+JSON.stringify(search)+',"2026-11-25")')));
+test('final PR: Hotel handoff validates unique ID, optional room and bounded dates',()=>{
+ assert.deepEqual(parsePartner('?from=jogjastay&hotelId=HOTEL_01&roomId=ROOM-2&checkIn=2026-12-12&checkOut=2026-12-14'),
+  {kind:'hotel',id:'HOTEL_01',roomId:'ROOM-2',date:'2026-12-12',endDate:'2026-12-14'});
+ assert.equal(parsePartner('?from=jogjastay&hotelId=HOTEL_01&hotelId=HOTEL_02').id,null);
+ assert.equal(parsePartner('?from=jogjastay&hotelId=%3Csvg%3E').id,null);
+ assert.equal(parsePartner('?from=jogjastay&hotelId=HOTEL_01&checkIn=2026-02-30').date,null);
+ assert.equal(parsePartner('?from=jogjastay&hotelId=HOTEL_01&checkIn=2026-12-14&checkOut=2026-12-12').endDate,null);
+});
+test('final PR: Transport handoff validates vehicle or vehicleId and rental range',()=>{
+ assert.deepEqual(parsePartner('?from=jogjatrans&vehicleId=HONDA_BEAT&startDate=2026-12-12&endDate=2026-12-14'),
+  {kind:'transport',id:'HONDA_BEAT',roomId:null,date:'2026-12-12',endDate:'2026-12-14'});
+ assert.equal(parsePartner('?from=jogjatrans&vehicle=HONDA_BEAT').id,'HONDA_BEAT');
+ assert.equal(parsePartner('?from=jogjatrans&vehicle=HONDA_BEAT&vehicleId=R-01').id,null);
+ assert.equal(parsePartner('?from=jogjatrans&vehicle=HONDA_BEAT&startDate=2026-12-12&endDate=2027-02-01').endDate,null);
+ assert.equal(parsePartner('?from=jogjatrans&vehicle=%3Cscript%3E').id,null);
+ assert.equal(parsePartner('?from=jogjatrans&from=jogjatrans&vehicleId=R-01'),null);
+ assert.equal(parsePartner('?from=wisata&vehicleId=R-01'),null);
+});
+
+test('official handoff accepts exact 60-character IDs and explicit boolean driver context',()=>{
+ assert.equal(parsePartner('?from=jogjatrans&vehicleId=R-01&withDriver=true').withDriver,true);
+ assert.equal(parsePartner('?from=jogjatrans&vehicleId=R-01&withDriver=false').withDriver,false);
+ assert.equal(parsePartner('?from=jogjatrans&vehicleId=R-01&withDriver=1').withDriver,undefined);
+ assert.equal(parsePartner('?from=jogjatrans&vehicleId=R-01&withDriver=true&withDriver=false').withDriver,undefined);
+ assert.equal(parsePartner('?from=jogjastay&hotelId='+'a'.repeat(60)).id,'a'.repeat(60));
+ assert.equal(parsePartner('?from=jogjastay&hotelId='+'a'.repeat(61)).id,null);
+});

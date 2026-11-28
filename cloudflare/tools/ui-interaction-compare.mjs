@@ -1,0 +1,20 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+const [a,b,out]=process.argv.slice(2);
+if(!a||!b||!out)throw Error('Usage: compare BASE_JSON HEAD_JSON OUT_DIR');
+const [base,head]=await Promise.all([a,b].map(async p=>JSON.parse(await fs.readFile(p,'utf8'))));
+if(base.protocol!==head.protocol||base.fixture!==head.fixture||base.measurement!==head.measurement)throw Error('Different protocols or fixtures');
+const scenarios=base.scenarios.map(before=>{
+ const after=head.scenarios.find(s=>s.name===before.name);
+ if(!after)throw Error('Missing scenario '+before.name);
+ const sameOutput=Array.isArray(before.observed?.items)&&Array.isArray(after.observed?.items)&&JSON.stringify(before.observed.items)===JSON.stringify(after.observed.items);
+ const valid=before.valid&&after.valid&&sameOutput&&Number.isFinite(before.actions)&&before.actions>0&&Number.isFinite(after.actions);
+ const reduction=valid?Number(((before.actions-after.actions)*100/before.actions).toFixed(1)):null;
+ return {name:before.name,valid,before:before.actions,after:after.actions,reductionPct:reduction,sameOutput,baseError:before.error||null,headError:after.error||null};
+});
+const result={protocol:base.protocol,fixture:base.fixture,measurement:base.measurement,scenarios,goalS_A_30percent:scenarios[0].valid?scenarios[0].reductionPct>=30:null,limitations:['Scripted discrete actions are not human click/keyboard timings.','Both snapshots must reach same end-state; invalid outcomes do not count.','No booking mutations.','Manual screen-reader test is separate.']};
+await fs.mkdir(out,{recursive:true});await fs.writeFile(path.join(out,'comparison.json'),JSON.stringify(result,null,2));
+const rows=['# JogjaTrip V4: reproducible before/after UX scenario comparison','','Same fixture and replay code on baseline main and PR head.','','|Scenario|Baseline actions|PR actions|Reduction|Valid|','|---|---:|---:|---:|---|'];
+for(const r of scenarios)rows.push('|'+r.name+'|'+(r.before??'N/A')+'|'+(r.after??'N/A')+'|'+(r.reductionPct===null?'N/A':r.reductionPct+'%')+'|'+(r.valid?'YES':'NO')+'|');
+rows.push('','S-A 30% target: '+(result.goalS_A_30percent===null?'NOT MEASURABLE':result.goalS_A_30percent?'MET':'NOT MET'),'','These are scripted operation counts, not measured human gestures or task time.');
+await fs.writeFile(path.join(out,'comparison.md'),rows.join('\n'));console.log(rows.join('\n'));if(scenarios.some(x=>!x.valid))process.exitCode=1;

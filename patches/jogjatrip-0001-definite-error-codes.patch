@@ -1,0 +1,59 @@
+From 38b6851b5faed481167b8257296ffcbc6e616e85 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 25 Nov 2026 21:52:29 +0700
+Subject: [PATCH] interop client: treat the provider error codes of Contract
+ 0.2 as definite rejections
+
+Providers answer INVALID_HOLD, INVALID_CUSTOMER, INVALID_QUANTITY, BAD_JSON,
+IDEMPOTENCY_REQUIRED, HOLD_NOT_ACTIVE, UNSUPPORTED_MEDIA_TYPE and
+INTEROP_NOT_CONFIGURED. Without this they were classified as unknown outcomes and
+pushed the saga into reconciliation after a clean rejection. Unknown codes stay unknown.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_019fePRr29X18mLGvPzeFWSG
+---
+ cloudflare/src/interop.ts                | 4 ++--
+ cloudflare/tests/interop-client.test.mjs | 8 ++++++++
+ 2 files changed, 10 insertions(+), 2 deletions(-)
+
+diff --git a/cloudflare/src/interop.ts b/cloudflare/src/interop.ts
+index 3b9573f..01490c1 100644
+--- a/cloudflare/src/interop.ts
++++ b/cloudflare/src/interop.ts
+@@ -51,7 +51,7 @@ const regions=new Set(vocabulary.regions.map(r=>r.conceptId));
+ const paymentStates=new Set<string>(vocabulary.statusMappings.paymentState.values);
+ const states=new Set<string>(['awaiting_payment','reserved','cancelled','expired']);
+ const priceUnits=new Set<string>(['night','ticket','day','trip','person']);
+-const stableCodes=new Set(['CONSENT_REQUIRED','IDEMPOTENCY_CONFLICT','NOT_AVAILABLE','INVALID_OFFER','HOLD_EXPIRED','HOLD_RELEASED','ALREADY_CONFIRMED','UNAUTHORIZED','INVALID_TOKEN','NOT_FOUND','VALIDATION_ERROR','INVALID_REQUEST','INVALID_IDEMPOTENCY_KEY','INVALID_EXTERNAL_REF']);
++const stableCodes=new Set(['CONSENT_REQUIRED','IDEMPOTENCY_CONFLICT','NOT_AVAILABLE','INVALID_OFFER','HOLD_EXPIRED','HOLD_RELEASED','ALREADY_CONFIRMED','UNAUTHORIZED','INVALID_TOKEN','NOT_FOUND','VALIDATION_ERROR','INVALID_REQUEST','INVALID_IDEMPOTENCY_KEY','INVALID_EXTERNAL_REF','INVALID_HOLD','INVALID_CUSTOMER','INVALID_QUANTITY','BAD_JSON','IDEMPOTENCY_REQUIRED','UNSUPPORTED_MEDIA_TYPE','HOLD_NOT_ACTIVE','INTEROP_NOT_CONFIGURED']);
+ const idemPattern=/^[A-Za-z0-9_-]{16,100}$/;
+ const externalPattern=/^[A-Za-z0-9_-]{1,64}$/;
+ const maxBody=2_000_000;
+@@ -194,7 +194,7 @@ export function createInteropClient(config:InteropConfig){
+    if(!response.ok){
+     let code='UPSTREAM_HTTP_ERROR';try{code=errorCode(await boundedJson(response))}catch{}
+     // An unknown/malformed rejection or conflicting existing key needs reconciliation.
+-    const definite=response.status===401||(response.status===400&&['CONSENT_REQUIRED','VALIDATION_ERROR','INVALID_REQUEST','INVALID_IDEMPOTENCY_KEY','INVALID_EXTERNAL_REF'].includes(code))||(response.status===409&&['NOT_AVAILABLE','HOLD_EXPIRED','HOLD_RELEASED','ALREADY_CONFIRMED'].includes(code))||response.status===422&&code==='INVALID_OFFER';
++    const definite=response.status===401||(response.status===400&&['CONSENT_REQUIRED','VALIDATION_ERROR','INVALID_REQUEST','INVALID_IDEMPOTENCY_KEY','INVALID_EXTERNAL_REF','INVALID_HOLD','INVALID_CUSTOMER','INVALID_QUANTITY','BAD_JSON','IDEMPOTENCY_REQUIRED'].includes(code))||(response.status===409&&['NOT_AVAILABLE','HOLD_EXPIRED','HOLD_RELEASED','ALREADY_CONFIRMED','HOLD_NOT_ACTIVE'].includes(code))||(response.status===415&&code==='UNSUPPORTED_MEDIA_TYPE')||(response.status===503&&code==='INTEROP_NOT_CONFIGURED')||response.status===422&&code==='INVALID_OFFER';
+     throw new InteropError(provider,op,response.status,code,mut&&!definite);
+    }
+    try{requireShape(allowed.includes(response.status));return parse(await boundedJson(response))}
+diff --git a/cloudflare/tests/interop-client.test.mjs b/cloudflare/tests/interop-client.test.mjs
+index e04477e..bbfc608 100644
+--- a/cloudflare/tests/interop-client.test.mjs
++++ b/cloudflare/tests/interop-client.test.mjs
+@@ -109,3 +109,11 @@ test('nested documented error envelope supported; optional mutation keys are sta
+ test('I1 is isolated from production route and legacy adapters',()=>{
+  for(const f of ['index.ts','orders.ts','provider.ts','plans.ts','packages.ts'])assert.doesNotMatch(readFileSync(new URL('../src/'+f,import.meta.url),'utf8'),/from\s+['"][^'"]*interop\.ts/);
+ });
++test('contract error codes returned by the real providers are definite rejections, unknown ones still need reconciliation',async()=>{
++ const reply=(status,code)=>async()=>new Response(JSON.stringify({code,message:'fixture'}),{status,headers:{'Content-Type':'application/json'}});
++ const client=(status,code)=>createInteropClient({provider:'wisata',baseUrl:'https://fixture.invalid',token:TOKEN,fetcher:reply(status,code)});
++ for(const [status,code] of [[400,'INVALID_HOLD'],[400,'INVALID_CUSTOMER'],[400,'INVALID_QUANTITY'],[400,'BAD_JSON'],[400,'IDEMPOTENCY_REQUIRED'],[409,'HOLD_NOT_ACTIVE'],[415,'UNSUPPORTED_MEDIA_TYPE'],[503,'INTEROP_NOT_CONFIGURED']])
++  await assert.rejects(client(status,code).hold(input('offer-fixture'),KEY),err(status,code,false),status+' '+code);
++ await assert.rejects(client(400,'SOMETHING_ELSE').hold(input('offer-fixture'),KEY),err(400,'UPSTREAM_HTTP_ERROR',true));
++ await assert.rejects(client(503,'UPSTREAM_BUSY').hold(input('offer-fixture'),KEY),err(503,'UPSTREAM_HTTP_ERROR',true));
++});
+-- 
+2.43.0
+

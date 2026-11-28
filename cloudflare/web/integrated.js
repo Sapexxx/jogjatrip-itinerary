@@ -11,11 +11,15 @@ function jtChooseSchedule({title,date,minDate,maxDate,startTime='',endTime='',in
  return new Promise(resolve=>{
   const modal=document.createElement('dialog');modal.className='jt-schedule-dialog';modal.setAttribute('aria-label','Atur jadwal kegiatan');const priorFocus=document.activeElement;
   const wrap=document.createElement('div');wrap.className='jt-schedule-content';
-  wrap.innerHTML=`<h3>Atur jadwal ${escapeHTML(title)}</h3><p>Jam ini adalah rencana pribadi, bukan jam reservasi yang sudah disetujui penyedia. Sesuaikan dengan jam buka/tutup dan ketentuan tiket.</p><form method="dialog" class="jt-schedule-form"><label>Tanggal kegiatan<input name="date" type="date" required min="${escapeHTML(minDate)}" max="${escapeHTML(maxDate)}" value="${escapeHTML(date)}"></label><label>Mulai<input name="start" type="time" required value="${escapeHTML(startTime)}"></label><label>Selesai<input name="end" type="time" required value="${escapeHTML(endTime)}"></label><p class="jt-schedule-note">${escapeHTML(info||'Jam operasional belum terverifikasi dari API. Periksa ketentuan penyedia sebelum berkunjung.')}</p><div class="jt-schedule-actions"><button type="button" class="secondary" data-cancel>Batal</button><button type="submit" class="dark">Simpan jadwal</button></div><p class="jt-schedule-error" role="alert"></p></form>`;
+  const name=String(title).toLowerCase();
+  const suggestStart=name.includes('check-in')?'14:00':name.includes('pengambilan')?'10:00':'09:00';
+  const suggestEnd=name.includes('check-in')?'15:00':name.includes('pengambilan')?'11:00':'10:00';
+  wrap.innerHTML=`<h3>Atur jadwal ${escapeHTML(title)}</h3><p>Jam contoh hanya untuk agenda pribadi, bukan slot atau jam buka penyedia yang telah dikonfirmasi. Anda dapat memilih sendiri jam lain sebelum menyimpan.</p><form method="dialog" class="jt-schedule-form"><label>Tanggal kegiatan<input name="date" type="date" required min="${escapeHTML(minDate)}" max="${escapeHTML(maxDate)}" value="${escapeHTML(date)}"></label><label>Mulai<input name="start" type="time" required value="${escapeHTML(startTime)}"></label><label>Selesai<input name="end" type="time" required value="${escapeHTML(endTime)}"></label><p class="jt-schedule-note">${escapeHTML(info||'Jam operasional belum terverifikasi dari API. Periksa ketentuan penyedia sebelum berkunjung.')}</p><div class="jt-schedule-actions"><button type="button" class="secondary" data-cancel>Batal</button><button type="button" class="outlinewide" data-suggested-time>Gunakan jam contoh (${escapeHTML(suggestStart)}–${escapeHTML(suggestEnd)}) dan simpan</button><button type="submit" class="dark">Simpan jadwal</button></div><p class="jt-schedule-error" role="alert"></p></form>`;
   modal.append(wrap);document.body.append(modal);
   const form=wrap.querySelector('form');let finished=false;
   const finish=value=>{if(finished)return;finished=true;modal.close();modal.remove();priorFocus?.focus();resolve(value)};
   form.querySelector('[data-cancel]').onclick=()=>finish(null);
+  form.querySelector('[data-suggested-time]').onclick=()=>{form.elements.start.value=suggestStart;form.elements.end.value=suggestEnd;form.requestSubmit()};
   modal.addEventListener('cancel',e=>{e.preventDefault();finish(null)});
   form.onsubmit=e=>{e.preventDefault();const d=form.elements.date.value,st=form.elements.start.value,en=form.elements.end.value;if(!d||!st||!en||en<=st){form.querySelector('.jt-schedule-error').textContent='Pilih tanggal dan pastikan jam selesai lebih besar daripada jam mulai.';return}finish({date:d,startTime:st,endTime:en})};
   modal.showModal();
@@ -51,6 +55,7 @@ function integratedOpenTransport({fromHome=false,startDate,endDate:finish,people
   if(people)ie('ibPeople').value=people;
   else ie('ibPeople').value=guests();
   if(!startDate)ie('ibNights').value=String(nights());
+  window.JTUXControls?.sync('ibPeople');window.JTUXControls?.sync('ibNights');
   integratedResetRental(start,finish||endDate(start,inights()));
  }
  document.querySelector('[data-ib-tab="transport"]')?.click();
@@ -85,11 +90,11 @@ function integratedTransportSummary(){
 }
 function integratedTransportPreference(){
  const check=ie('v4UseTransport');if(!check)return;
- check.onchange=()=>{
+ check.onchange=async()=>{
   if(check.checked){selectCatalogTab('transport');document.querySelector('#explore .section-top').scrollIntoView({behavior:'smooth',block:'start'});return}
   const existing=planState.activities.filter(a=>a.sourceItem?.type==='transport'),cart=state.cart.filter(c=>c.item.type==='transport');
   if(existing.some(a=>a.orderId)){check.checked=true;toast('Kendaraan yang telah memiliki pesanan tidak dapat dihapus');return}
-  if((existing.length||cart.length)&&!confirm('Hapus pilihan transportasi dari itinerary?')){check.checked=true;return}
+  if((existing.length||cart.length)&&!(await window.JTUXDialog.confirm('Hapus pilihan transportasi dari itinerary?'))){check.checked=true;return}
   state.cart=state.cart.filter(c=>c.item.type!=='transport');state.quote=null;planState.activities=planState.activities.filter(a=>a.sourceItem?.type!=='transport');integrated.quote=null;saveCart();integratedRender();
  };
 }
@@ -280,7 +285,7 @@ async function integratedSave(){
  $('#planInfo').textContent='Tersimpan · '+p.id;
  integratedRender();toast('Itinerary tersimpan secara mandiri');return p;
 }
-async function integratedQuote(){const btn=ie('ibQuote');btn.disabled=true;try{if(!planState.activities.some(a=>a.sourceItem&&!a.orderId)){toast('Tambahkan hotel, wisata, atau kendaraan yang belum dipesan');return}await integratedSave();const q=await request(`/api/itineraries/${encodeURIComponent(planState.id)}/quote`,{method:'POST',headers:{'X-Plan-Token':planState.accessToken},body:'{}'});integrated.quote=q;const limit=Number(ie('ibBudget').value)||0;const over=limit>0&&q.total>limit;ie('ibQuoteResult').innerHTML=`<div class="ib-cost"><h4>Rincian harga dari API</h4>${q.items.map(x=>`<div class="price-row"><span>${escapeHTML(x.title)} ${x.error?'<small>· '+escapeHTML(x.error)+'</small>':''}</span><strong>${x.available?money(x.amount):'Tidak tersedia'}</strong></div>`).join('')}<div class="price-row total"><span>Total sebelum diskon</span><strong>${money(q.total)}</strong></div>${over?'<p class="sync-error">Melebihi budget. Ubah pilihan layanan sebelum checkout.</p>':''}<small>Harga belum termasuk diskon curated package; quote akan diperiksa lagi saat booking.</small></div>`;q.available=!over&&q.available;ie('ibCustomer').hidden=!q.available;toast(q.available?'Quote live berhasil':'Periksa ketersediaan atau budget')}catch(e){integrated.quote=null;ie('ibCustomer').hidden=true;toast(e.message)}finally{btn.disabled=false}}
+async function integratedQuote(){const btn=ie('ibQuote');btn.disabled=true;try{if(!planState.activities.some(a=>a.sourceItem&&!a.orderId)){toast('Tambahkan hotel, wisata, atau kendaraan yang belum dipesan');return}await integratedSave();const q=await request(`/api/itineraries/${encodeURIComponent(planState.id)}/quote`,{method:'POST',headers:{'X-Plan-Token':planState.accessToken},body:'{}'});integrated.quote=q;jtI5QuoteRevision++;const limit=Number(ie('ibBudget').value)||0;const over=limit>0&&q.total>limit;ie('ibQuoteResult').innerHTML=`<div class="ib-cost"><h4>Rincian harga dari API</h4>${q.items.map(x=>`<div class="price-row"><span>${escapeHTML(x.title)} ${x.error?'<small>· '+escapeHTML(x.error)+'</small>':''}</span><strong>${x.available?money(x.amount):'Tidak tersedia'}</strong></div>`).join('')}<div class="price-row total"><span>Total sebelum diskon</span><strong>${money(q.total)}</strong></div>${over?'<p class="sync-error">Melebihi budget. Ubah pilihan layanan sebelum checkout.</p>':''}<small>Harga belum termasuk diskon curated package; quote akan diperiksa lagi saat booking.</small></div>`;q.available=!over&&q.available;ie('ibCustomer').hidden=!q.available;toast(q.available?'Quote live berhasil':'Periksa ketersediaan atau budget')}catch(e){integrated.quote=null;ie('ibCustomer').hidden=true;toast(e.message)}finally{btn.disabled=false;window.JTInteropI5Mounted?.refresh('plan')}}
 async function integratedBook(){if(!integrated.quote?.available)return;if(!ie('ibName').value.trim()||!ie('ibEmail').value.includes('@')||(planState.activities.some(x=>x.sourceItem?.type==='transport')&&!/^[+0-9 ()-]{9,20}$/.test(ie('ibPhone').value.trim()))){toast('Lengkapi nama dan email');return}if(!await jtConfirmDialog('Konfirmasi booking demo ke penyedia? Rental JogjaTrans merupakan simulasi.'))return;const b=ie('ibBook');b.disabled=true;try{const res=await request(`/api/itineraries/${encodeURIComponent(planState.id)}/book`,{method:'POST',headers:{'X-Plan-Token':planState.accessToken},body:JSON.stringify({customer:{name:ie('ibName').value,email:ie('ibEmail').value,phone:ie('ibPhone').value}})});state.orders.unshift({id:res.order.id,token:res.accessToken});localStorage.setItem('jt_orders',JSON.stringify(state.orders));planState.activities=res.itinerary?.activities||planState.activities;integrated.quote=null;integratedRender();ie('ibQuoteResult').innerHTML=`<div class="ib-cost"><h4>Pesanan ${escapeHTML(res.order.id)} · ${escapeHTML(res.order.status)}</h4><p>Referensi tercatat. Periksa detail dan sinkronisasi pada halaman Pesanan.</p></div>`;$('#lookupId').value=res.order.id;$('#lookupToken').value=res.accessToken;toast('Pesanan '+res.order.status+'. Jangan checkout ulang saat status UNKNOWN.')}catch(e){toast(e.message+' — Jika status tidak pasti, jangan checkout ulang; periksa order penyedia.')}finally{b.disabled=false}}
 async function integratedSync(){if(!planState.id){toast('Simpan itinerary terlebih dahulu');return}try{const r=await request(`/api/itineraries/${encodeURIComponent(planState.id)}/sync`,{method:'POST',headers:{'X-Plan-Token':planState.accessToken},body:'{}'});planState.activities=r.itinerary.activities;integratedRender();toast('Status booking diperiksa kembali ke penyedia')}catch(e){toast(e.message)}}
 integratedInit();
@@ -288,3 +293,9 @@ integratedTransportPreference();
 // Main catalog is asynchronous. Refresh the integrated selection once loaded.
 const oldRenderCatalog=renderCatalog;
 renderCatalog=function(){oldRenderCatalog();if(ie('ibHotelOptions'))integratedRender()};
+
+// I5: local draft only. The plan token and customer fields never enter the preview.
+let jtI5QuoteRevision=0;
+window.JTInteropI5Plan=()=>({id:planState.id,planToken:planState.accessToken,quoteRevision:jtI5QuoteRevision,items:planState.activities.filter(a=>a.sourceItem&&!a.orderId).map(a=>({...a.sourceItem})),quote:integrated.quote?{total:integrated.quote.total,items:integrated.quote.items,available:integrated.quote.available}:null});
+const jtI5IntegratedRender=integratedRender;
+integratedRender=function(){const value=jtI5IntegratedRender.apply(this,arguments);window.JTInteropI5Mounted?.refresh('plan');return value};

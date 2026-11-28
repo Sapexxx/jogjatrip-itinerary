@@ -83,6 +83,78 @@ function jtApplyWisataHandoff(){
  page('explore');selectCatalogTab('wisata');
  openDetail({kind:'wisata',id:String(d.id),name:d.name,desc:d.region||'Yogyakarta',price:Number(d.price||0),data:d});
 }
+// Final PR: untrusted partner handoffs only prefill catalog context. Never
+// create a hold, cart item, provider booking, consent or customer record.
+function jtParsePartnerHandoff(search,nowDate){
+ const q=new URLSearchParams(search),from=q.getAll('from');
+ if(from.length!==1||!['jogjastay','jogjatrans'].includes(from[0]))return null;
+ const kind=from[0]==='jogjastay'?'hotel':'transport';
+ const ids=kind==='hotel'?q.getAll('hotelId'):q.getAll('vehicleId');
+ const altIds=kind==='transport'?q.getAll('vehicle'):[];
+ if(kind==='transport'&&ids.length+altIds.length!==1)return {kind,id:null,date:null,endDate:null,roomId:null};
+ const rawId=ids.length===1?ids[0]:altIds[0];
+ const id=ids.length<=1&&/^[A-Za-z0-9_-]{1,60}$/.test(rawId||'')?rawId:null;
+ const room=q.getAll('roomId'),roomId=kind==='hotel'&&room.length===1&&/^[A-Za-z0-9_-]{1,60}$/.test(room[0])?room[0]:null;
+ const dateField=kind==='hotel'?'checkIn':'startDate';
+ const endField=kind==='hotel'?'checkOut':'endDate';
+ const dates=q.getAll(dateField),ends=q.getAll(endField);
+ const valid=raw=>{
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(raw||''))return null;
+  const date=Date.parse(raw+'T00:00:00Z'),start=Date.parse(nowDate+'T00:00:00Z');
+  return Number.isFinite(date)&&new Date(date).toISOString().slice(0,10)===raw&&date>=start&&date<=start+365*86400000?raw:null;
+ };
+ const date=dates.length===1?valid(dates[0]):null;
+ const end=ends.length===1?valid(ends[0]):null;
+ const days=date&&end?Math.round((Date.parse(end)-Date.parse(date))/86400000):null;
+ const endDate=days!==null&&days>=(kind==='hotel'?1:0)&&days<=(kind==='hotel'?30:29)?end:null;
+ const driver=q.getAll('withDriver');
+ const withDriver=kind==='transport'&&driver.length===1&&['true','false'].includes(driver[0])?driver[0]==='true':undefined;
+ return {kind,id,date,endDate,roomId,...(withDriver===undefined?{}:{withDriver})};
+}
+let jtInboundPartner=null;
+function jtInitPartnerHandoff(){
+ const url=new URL(window.location.href),parsed=jtParsePartnerHandoff(url.search,dateStr(new Date()));
+ if(!parsed)return;
+ jtInboundPartner=parsed;
+ for(const key of ['from','hotelId','roomId','checkIn','checkOut','vehicleId','vehicle','startDate','endDate','withDriver'])url.searchParams.delete(key);
+ window.history.replaceState(window.history.state,'',url.pathname+url.search+url.hash);
+ jtApplyPartnerHandoff();
+}
+function jtApplyPartnerHandoff(){
+ const p=jtInboundPartner;
+ if(!p)return;
+ if(!p.id){jtInboundPartner=null;toast('Tautan provider tidak valid. Pilih layanan dari katalog.');return}
+ if(p.kind==='hotel'){
+  if(state.catalogLoading)return;
+  jtInboundPartner=null;
+  if(state.catalogResults.hotels!=='ok'||state.catalogResults.rooms!=='ok'){toast('Katalog hotel tidak tersedia. Silakan cari kembali.');return}
+  const hotel=state.hotels.find(h=>String(h.hotelId||h.id)===p.id);
+  if(!hotel){toast('Hotel dari tautan tidak ditemukan.');return}
+  const rooms=state.rooms.filter(r=>String(r.hotelId||r.hotel_id)===p.id);
+  if(p.roomId&&!rooms.some(r=>String(r.roomId||r.id)===p.roomId)){toast('Kamar dari tautan tidak tersedia.');return}
+  if($('#detailDialog').open){toast('Tutup dialog yang sedang terbuka, lalu pilih hotel dari katalog.');return}
+  if(p.date)$('#tripDate').value=p.date;
+  page('explore');selectCatalogTab('hotel');
+  openDetail({kind:'hotel',id:p.id,name:hotel.name||hotel.hotelName||'Hotel',desc:hotel.city||'Yogyakarta',price:0,data:hotel});
+  if(p.roomId&&$('#mRoom'))$('#mRoom').value=p.roomId;
+  if(p.date&&$('#mIn'))$('#mIn').value=p.date;
+  if(p.endDate&&$('#mOut'))$('#mOut').value=p.endDate;
+  return;
+ }
+ // Transport identity must be reselected from server-fetched catalog. URL data
+ // is never authoritative evidence of inventory or a selected rental option.
+ jtInboundPartner=null;
+ page('explore');selectCatalogTab('transport');
+ if(p.withDriver!==undefined){
+  $('#exploreRentDriver').value=String(p.withDriver);
+   window.JTUXControls?.sync('exploreRentDriver');
+  if(p.withDriver&&$('#exploreRentType').value==='motor'){$('#exploreRentType').value='mobil';$('#exploreRentCategory').value='all'}
+   window.JTUXControls?.sync('exploreRentDriver');window.JTUXControls?.sync('exploreRentType');
+ }
+ if(p.date&&p.endDate){$('#exploreRentStart').value=p.date;$('#exploreRentEnd').value=p.endDate;}
+ if(p.withDriver!==undefined||(p.date&&p.endDate)){invalidateExploreRental();loadExploreVehicles();}
+ toast('Tautan JogjaTrans diterima. Periksa model '+p.id+' dan stok di katalog terbaru sebelum memilih.');
+}
 function jtReadLocation({initial=false}={}){
  const raw=window.location.hash,route=jtParseRoute(raw);
  // The skip link is an in-page accessibility anchor, not a route.
@@ -109,6 +181,7 @@ document.addEventListener?.('DOMContentLoaded',()=>{
  window.addEventListener('hashchange',()=>jtReadLocation());
  jtReadLocation({initial:true});
  jtInitWisataHandoff();
+ jtInitPartnerHandoff();
 });
 $$('[data-tab]').forEach(x=>x.onclick=()=>selectCatalogTab(x.dataset.tab));
 const region=()=>$('#region').value, tripDate=()=>$('#tripDate').value, guests=()=>Number($('#guests').value), nights=()=>Number($('#nights').value);
@@ -151,6 +224,7 @@ for(const id of ['exploreRentStart','exploreRentEnd','exploreRentType','exploreR
   if(id==='exploreRentStart')$('#exploreRentEnd').min=$('#exploreRentStart').value;
   if(id==='exploreRentType'){$('#exploreRentCategory').value='all';if($('#exploreRentType').value==='motor')$('#exploreRentDriver').value='false'}
   if(id==='exploreRentDriver'&&$('#exploreRentDriver').value==='true'&&$('#exploreRentType').value==='motor'){$('#exploreRentType').value='mobil';$('#exploreRentCategory').value='all'}
+  window.JTUXControls?.sync('exploreRentDriver');window.JTUXControls?.sync('exploreRentType');
   invalidateExploreRental();loadExploreVehicles();
  };
 }
@@ -184,7 +258,7 @@ async function loadCatalog(){
  const rental=loadExploreVehicles();
  await Promise.allSettled([...jobs,rental]);
  if(seq!==state.catalogSeq)return;
- state.catalogLoading=false;renderCatalog();if(typeof renderPackages==='function')renderPackages();jtApplyWisataHandoff();
+ state.catalogLoading=false;renderCatalog();if(typeof renderPackages==='function')renderPackages();jtApplyWisataHandoff();jtApplyPartnerHandoff();
 }
 function renderCatalog(){
  const rental=state.tab==='transport',showVehicles=rental||state.tab==='all';
@@ -201,7 +275,7 @@ function renderCatalog(){
  const items=[];if(state.tab==='all'||state.tab==='hotel')state.hotels.forEach(h=>{const id=String(h.hotelId||h.id||'');const related=state.rooms.filter(r=>String(r.hotelId||r.hotel_id)===id);const minPrice=Math.min(...related.map(r=>Number(r.pricePerNight||r.price_per_night||Infinity)));items.push({kind:'hotel',id,name:h.name||h.hotelName||'Hotel',desc:[h.city,h.area].filter(Boolean).join(' · '),price:Number.isFinite(minPrice)?minPrice:0,icon:'home',image:h.imageUrl||h.image_url||h.photoUrl||'',data:h})});if(state.tab==='all'||state.tab==='wisata')state.destinations.forEach(d=>items.push({kind:'wisata',id:String(d.id),name:d.name,desc:d.region||'Yogyakarta',price:Number(d.price||0),icon:'pin',image:d.imageUrl||d.image_url||(Array.isArray(d.photos)?d.photos[0]:''),data:d}));if(showVehicles)state.vehicles.slice(0,state.rentalLimit).forEach(v=>items.push({kind:'transport',id:String(v.id),name:v.name,desc:[v.type==='motor'?'Motor':'Mobil',v.category,v.transmission,v.seats?String(v.seats)+' kursi':''].filter(Boolean).join(' · '),price:Number(v.dailyPrice),icon:v.type==='motor'?'bike':'car',image:v.imageUrl||'',data:v}));
  $('#catalog').setAttribute?.('aria-busy',String(state.catalogLoading||state.rentalLoading));
  $('#catalog').innerHTML=items.length?items.map((x,i)=>`<article class="tile">${cardMedia(x)}<div class="tile-body"><div class="section-tag">${escapeHTML(x.desc)}</div><h3>${escapeHTML(x.name)}</h3><p>${x.kind==='hotel'?'Pilih tipe kamar untuk melanjutkan reservasi.':x.kind==='transport'?escapeHTML(x.data.description||'Sewa kendaraan dari JogjaTrans.'):'Tentukan tanggal dan tiket untuk itinerary.'}</p>${x.kind==='transport'?'<span class="rental-card-total">Total '+money(x.data.totalPrice)+' · '+escapeHTML(String(x.data.days))+' hari · '+escapeHTML(String(x.data.unitsAvailable))+' unit tersedia · '+(x.data.withDriver?'Dengan sopir':'Lepas kunci')+' · simulasi</span>':''}<div class="tile-row"><strong>${x.price?money(x.price):'—'} <small>${x.kind==='hotel'?'/ malam':x.kind==='transport'?'/ hari':''}</small></strong><button data-view="${i}" ${x.kind==='transport'&&(x.data.available!==true||Number(x.data.unitsAvailable)<1)?'disabled':''}>${x.kind==='transport'?(x.data.available===true&&Number(x.data.unitsAvailable)>0?'Pilih kendaraan':'Stok habis'):'Pilih layanan'}</button></div></div></article>`).join(''):((rental?state.rentalLoading:state.catalogLoading)?jtSkeleton('Memuat katalog penyedia…'):(rental?'<div class="empty"><strong>'+escapeHTML(state.rentalLoading?'Memuat kendaraan…':state.rentalError?'Katalog tidak dapat dimuat':'Tidak ada kendaraan sesuai filter')+'</strong>'+escapeHTML(state.rentalError||'Ubah tanggal atau filter, lalu cari kembali.')+'</div>':'<div class="empty"><strong>'+(state.catalogLoading||state.rentalLoading?'Memuat katalog…':'Belum ada katalog')+'</strong>Periksa koneksi API penyedia atau filter wilayah Anda.</div>'));$$('[data-view]').forEach(b=>b.onclick=()=>openDetail(items[Number(b.dataset.view)]))}
-function openDetail(x){if(!x)return;if(x.kind==='transport'){openRentalDetail(x);return;}let html=`<div class="section-tag">${x.kind==='hotel'?'JOGJASTAY HOTEL':'WISATA JOGJA'}</div><h2 class="dialog-title">${escapeHTML(x.name)}</h2><p class="dialog-sub">${escapeHTML(x.desc)}</p><div class="modalfields">`;if(x.kind==='hotel'){const rooms=state.rooms.filter(r=>String(r.hotelId||r.hotel_id)===x.id);if(!rooms.length){toast('Belum ada kamar untuk hotel ini');return}html+=`<label>Pilih kamar<select id="mRoom">${rooms.map(r=>`<option value="${escapeHTML(String(r.roomId||r.id))}">${escapeHTML(r.roomType||r.type||'Kamar')} — ${money(r.pricePerNight||r.price_per_night)}</option>`).join('')}</select></label><label>Check-in<input id="mIn" type="date" min="${dateStr(today)}" value="${tripDate()}"></label><label>Check-out<input id="mOut" type="date" value="${endDate(tripDate(),nights())}"></label><label>Jumlah tamu<input id="mGuests" type="number" min="1" max="20" value="${guests()}"></label>`}else{html+=`<label>Tanggal kunjungan<input id="mDate" type="date" min="${dateStr(today)}" value="${tripDate()}"></label><label>Jumlah tiket<input id="mQty" type="number" min="1" max="20" value="${guests()}"></label><label>Tipe tiket<select id="mTier"><option value="base">Reguler</option><option value="plus">Plus (jika tersedia)</option></select></label>`}html+=`<label>${x.kind==='hotel'?'Perkiraan jam tiba di hotel':'Jam kunjungan yang diinginkan'}<input id="mStartTime" type="time" required></label><label>${x.kind==='hotel'?'Perkiraan akhir proses check-in':'Perkiraan jam selesai kunjungan'}<input id="mEndTime" type="time" required></label><p class="help-text">Jam adalah rencana pribadi di Itinerary Jogja; tiket/kamar tidak otomatis dipesan untuk slot waktu tersebut. Periksa jam operasional dan aturan penyedia.</p></div><button id="addItem" class="primary wide">+ Tambahkan ke itinerary</button>`;$('#detailContent').innerHTML=html;$('#detailDialog').showModal();$('#addItem').onclick=()=>{let item;if(x.kind==='hotel')item={type:'hotel',hotelId:x.id,roomId:$('#mRoom').value,checkIn:$('#mIn').value,checkOut:$('#mOut').value,guests:Number($('#mGuests').value)};else item={type:'wisata',destinationId:Number(x.id),visitDate:$('#mDate').value,quantity:Number($('#mQty').value),tier:$('#mTier').value};if(item.type==='hotel'&&(item.checkOut<=item.checkIn||item.guests<1)){toast('Periksa tanggal dan jumlah tamu');return}if(item.type==='wisata'&&item.quantity<1){toast('Jumlah tiket tidak valid');return}const start=$('#mStartTime').value,end=$('#mEndTime').value;if(!jtValidTimes(start,end)){toast('Pilih jam mulai dan jam selesai yang valid');return}item.plannedStartTime=start;item.plannedEndTime=end;if(state.cart.length>=5){toast('Maksimal lima layanan per paket');return}state.cart.push({item,name:x.name,estimate:x.price});state.quote=null;saveCart();$('#detailDialog').close();toast(x.name+' berhasil ditambahkan');page('planner')}}
+function openDetail(x){if(!x)return;if(x.kind==='transport'){openRentalDetail(x);return;}let html=`<div class="section-tag">${x.kind==='hotel'?'JOGJASTAY HOTEL':'WISATA JOGJA'}</div><h2 class="dialog-title">${escapeHTML(x.name)}</h2><p class="dialog-sub">${escapeHTML(x.desc)}</p><div class="modalfields">`;if(x.kind==='hotel'){const rooms=state.rooms.filter(r=>String(r.hotelId||r.hotel_id)===x.id);if(!rooms.length){toast('Belum ada kamar untuk hotel ini');return}html+=`<label>Pilih kamar<select id="mRoom">${rooms.map(r=>`<option value="${escapeHTML(String(r.roomId||r.id))}">${escapeHTML(r.roomType||r.type||'Kamar')} — ${money(r.pricePerNight||r.price_per_night)}</option>`).join('')}</select></label><label>Check-in<input id="mIn" type="date" min="${dateStr(today)}" value="${tripDate()}"></label><label>Check-out<input id="mOut" type="date" value="${endDate(tripDate(),nights())}"></label><label>Jumlah tamu<input id="mGuests" type="number" min="1" max="20" value="${guests()}"></label>`}else{html+=`<label>Tanggal kunjungan<input id="mDate" type="date" min="${dateStr(today)}" value="${tripDate()}"></label><label>Jumlah tiket<input id="mQty" type="number" min="1" max="20" value="${guests()}"></label><label>Tipe tiket<select id="mTier"><option value="base">Reguler</option><option value="plus">Plus (jika tersedia)</option></select></label>`}html+=`<label>${x.kind==='hotel'?'Perkiraan jam tiba di hotel':'Jam kunjungan yang diinginkan'}<input id="mStartTime" type="time" required></label><label>${x.kind==='hotel'?'Perkiraan akhir proses check-in':'Perkiraan jam selesai kunjungan'}<input id="mEndTime" type="time" required></label><p class="help-text">Jam adalah rencana pribadi di Itinerary Jogja; tiket/kamar tidak otomatis dipesan untuk slot waktu tersebut. Periksa jam operasional dan aturan penyedia.</p></div><button id="addItemSuggested" type="button" class="outlinewide">Gunakan jam contoh & tambahkan (bukan reservasi)</button><button id="addItem" class="primary wide">+ Tambahkan ke itinerary</button>`;$('#detailContent').innerHTML=html;$('#detailDialog').showModal();$('#addItem').onclick=()=>{let item;if(x.kind==='hotel')item={type:'hotel',hotelId:x.id,roomId:$('#mRoom').value,checkIn:$('#mIn').value,checkOut:$('#mOut').value,guests:Number($('#mGuests').value)};else item={type:'wisata',destinationId:Number(x.id),visitDate:$('#mDate').value,quantity:Number($('#mQty').value),tier:$('#mTier').value};if(item.type==='hotel'&&(item.checkOut<=item.checkIn||item.guests<1)){toast('Periksa tanggal dan jumlah tamu');return}if(item.type==='wisata'&&item.quantity<1){toast('Jumlah tiket tidak valid');return}const start=$('#mStartTime').value,end=$('#mEndTime').value;if(!jtValidTimes(start,end)){toast('Pilih jam mulai dan jam selesai yang valid');return}item.plannedStartTime=start;item.plannedEndTime=end;if(state.cart.length>=5){toast('Maksimal lima layanan per paket');return}state.cart.push({item,name:x.name,estimate:x.price});state.quote=null;saveCart();$('#detailDialog').close();toast(x.name+' berhasil ditambahkan');page('planner')};$('#addItemSuggested')?.addEventListener('click',()=>{$('#mStartTime').value=x.kind==='hotel'?'14:00':'09:00';$('#mEndTime').value=x.kind==='hotel'?'15:00':'10:00';$('#addItem').click()})}
 async function openRentalDetail(x){
  const v=x.data;if(v.available!==true||Number(v.unitsAvailable)<1){toast('Kendaraan tidak tersedia');return}
  if(state.cart.length>=5){toast('Maksimal lima layanan per paket');return}
@@ -246,7 +320,12 @@ function renderCart(){
 }
 function payload(){return {customer:{name:$('#customerName').value.trim(),email:$('#customerEmail').value.trim(),phone:$('#customerPhone').value.trim()},items:state.cart.map(c=>c.item)}}
 $('#quoteBtn').onclick=async()=>{if(!state.cart.length){toast('Tambahkan layanan dahulu');return}if(state.cart.some(c=>!jtValidTimes(c.item.plannedStartTime,c.item.plannedEndTime))){toast('Atur jam rencana pada setiap layanan sebelum quote');return}const b=$('#quoteBtn');b.disabled=true;b.textContent='Memeriksa API...';try{state.quote=await request('/api/quote',{method:'POST',body:JSON.stringify(payload())});renderCart();toast('Harga dan stok berhasil diverifikasi')}catch(e){state.quote=null;renderCart();toast(e.message)}finally{b.disabled=false;b.textContent='Periksa harga & stok'}};
-$('#bookBtn').onclick=async()=>{if(!state.quote)return;if(state.cart.some(c=>!jtValidTimes(c.item.plannedStartTime,c.item.plannedEndTime))){toast('Jadwal layanan belum lengkap');return}if(!$('#customerName').value.trim()||!$('#customerEmail').value.includes('@')){toast('Lengkapi nama dan email');return}if(!confirm('Konfirmasi reservasi DEMO ke layanan hotel/wisata? Booking akan tercatat pada database provider.'))return;const b=$('#bookBtn');b.disabled=true;b.textContent='Mengirim ke provider...';try{const res=await request('/api/book',{method:'POST',body:JSON.stringify(payload())});state.orders.unshift({id:res.order.id,token:res.accessToken});localStorage.setItem('jt_orders',JSON.stringify(state.orders));state.cart=[];state.quote=null;saveCart();page('orders');toast('Status paket: '+res.order.status+'. Kode: '+res.order.id)}catch(e){toast(e.message+' — Periksa status sebelum mencoba lagi.')}finally{b.disabled=false;b.textContent='Konfirmasi booking'}};
+$('#bookBtn').onclick=async()=>{if(!state.quote)return;if(state.cart.some(c=>!jtValidTimes(c.item.plannedStartTime,c.item.plannedEndTime))){toast('Jadwal layanan belum lengkap');return}if(!$('#customerName').value.trim()||!$('#customerEmail').value.includes('@')){toast('Lengkapi nama dan email');return}if(!(await window.JTUXDialog.confirm('Konfirmasi reservasi DEMO ke layanan hotel/wisata? Booking akan tercatat pada database provider.')))return;const b=$('#bookBtn');b.disabled=true;b.textContent='Mengirim ke provider...';try{const res=await request('/api/book',{method:'POST',body:JSON.stringify(payload())});state.orders.unshift({id:res.order.id,token:res.accessToken});localStorage.setItem('jt_orders',JSON.stringify(state.orders));state.cart=[];state.quote=null;saveCart();page('orders');toast('Status paket: '+res.order.status+'. Kode: '+res.order.id)}catch(e){toast(e.message+' — Periksa status sebelum mencoba lagi.')}finally{b.disabled=false;b.textContent='Konfirmasi booking'}};
 function renderOrders(){$('#orderList').innerHTML=state.orders.length?state.orders.map(o=>`<div class="ordercard"><h3>${escapeHTML(o.id)}</h3><p>Token disimpan di browser ini. Pilih untuk memeriksa status dan sinkronkan jika ada perubahan provider.</p><button class="dark" data-order="${escapeHTML(o.id)}">Lihat rincian <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/icons.svg#arrow"></use></svg></button></div>`).join(''):'<div class="empty"><strong>Belum ada pesanan di browser ini</strong>Setelah checkout, data pesanan muncul di sini.</div>';$$('[data-order]').forEach(x=>x.onclick=()=>{const o=state.orders.find(n=>n.id===x.dataset.order);$('#lookupId').value=o.id;$('#lookupToken').value=o.token;lookup()})}
 async function lookup(){const id=$('#lookupId').value.trim(),token=$('#lookupToken').value.trim();if(!id||!token){toast('ID dan token akses harus diisi');return}try{const o=await request('/api/orders/'+encodeURIComponent(id),{headers:{'X-Order-Token':token}});$('#lookupResult').innerHTML=`<div class="ordercard"><h3>${escapeHTML(o.id)} <span class="status ${escapeHTML(o.status)}">${escapeHTML(o.status)}</span></h3><p>${escapeHTML(o.customer.name)} · ${escapeHTML(o.createdAt)}</p>${o.items.map((x,i)=>`<div class="price-row"><div><strong>${escapeHTML(x.item.type.toUpperCase())}</strong><br><small>${escapeHTML(x.bookingId||x.error||'Belum diproses')}<br><small>${escapeHTML(jtCartScheduleLabel(x.item))}</small>${x.syncError?'<br><em class="sync-error">Gagal verifikasi: '+escapeHTML(x.syncError)+'</em>':''}</small></div><span class="status ${escapeHTML(x.status)}">${escapeHTML(x.status)}</span></div>`).join('')}<div class="price-row total">Total terkonfirmasi <strong>${money(o.total)}</strong></div></div>`}catch(e){toast(e.message)}}
 $('#lookupBtn').onclick=lookup;$('#findBtn').onclick=loadCatalog;state.cart=JSON.parse(sessionStorage.getItem('jt_cart')||'[]');renderCatalog();saveCart();loadCatalog();
+
+// I5: expose selection-only data to isolated, non-mutating Contract 0.2 preview.
+window.JTInteropI5Cart=()=>({items:state.cart.map(c=>({...c.item})),quote:state.quote?{total:state.quote.total,items:state.quote.items,available:state.quote.available}:null});
+const jtI5RenderCart=renderCart;
+renderCart=function(){const value=jtI5RenderCart.apply(this,arguments);window.JTInteropI5Mounted?.refresh('cart');return value};
