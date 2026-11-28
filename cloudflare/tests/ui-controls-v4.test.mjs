@@ -32,3 +32,11 @@ test('legacy prefill calls explicit display sync for enhanced controls',()=>{
  assert.match(integrated,/JTUXControls\?\.sync\('ibNights'\)/);
  assert.match(app,/JTUXControls\?\.sync\('exploreRentDriver'\)/);
 });
+
+test('guest counts use a consistent editable stepper, unlike sparse hotel nights',()=>{
+ const s=readFileSync(new URL('controls.js',root),'utf8');
+ assert.match(s,/stepper\('guests',\{min:1,max:4\}\)/);
+ assert.match(s,/stepper\('ibPeople',\{min:1,max:20\}\)/);
+ assert.match(s,/value\.addEventListener\('change',\(\)=>put\(Number\(value\.value\)\)\)/);
+ assert.doesNotMatch(s,/stepper\('ibNights'/);
+});

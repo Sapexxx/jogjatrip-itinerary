@@ -62,3 +62,7 @@ footer{background:white;border-top:1px solid var(--line);padding:30px max(5%,cal
 .ux-confirm-dialog p{line-height:1.6;overflow-wrap:anywhere}
 .ux-dialog-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:10px;margin-top:18px}
 .ux-dialog-actions button{min-height:44px}
+
+.ux-stepper-value{width:64px;max-width:72px;border:0;background:var(--white);text-align:center;font:inherit;font-weight:700;appearance:textfield}
+.ux-stepper-value:focus-visible{outline:3px solid var(--green-700);outline-offset:-3px}
+.ux-stepper-value::-webkit-inner-spin-button,.ux-stepper-value::-webkit-outer-spin-button{appearance:none;margin:0}

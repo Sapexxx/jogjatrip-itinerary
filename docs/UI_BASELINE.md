@@ -82,6 +82,7 @@ Sumber tahap A: estimasi manual **S-A ~17**, **S-B ~10**, **S-C ~12**; sumber in
 | S-C | ~12 (estimasi manual) | BELUM DIUKUR |
 | Kontrol nilai durasi kecil | Select 4 opsi | ChipGroup dari opsi identik |
 | Jumlah wisatawan builder | Native number 1–20 | Stepper 1–20 + sumber number identik |
+| Jumlah wisatawan beranda | Select 1–4 | Stepper 1–4 + sumber select identik |
 | Formulir pelanggan | Tiga konteks berbeda | Perbaikan atribut kontak; penyatuan data masih backlog |
 | Warna | Palet semantik `tokens.css` | Palet tidak diubah |
 | Kontras / Lighthouse setelah perubahan | Bukti lama hanya baseline | MENUNGGU bukti CI pada Draft PR |
