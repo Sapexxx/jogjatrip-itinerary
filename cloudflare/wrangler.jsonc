@@ -23,5 +23,23 @@
     "WISATA_API_URL": "https://wisata-jogja-ten.vercel.app",
     "TRANSPORT_API_URL": "https://jogjatrans-service.jogjawisata.workers.dev",
     "BOOKING_ENABLED": "false"
+  },
+  "previews": {
+    "d1_databases": [
+      {
+        "binding": "DB",
+        "database_name": "jogjatrip-preview-db",
+        "database_id": "64c6f73b-af78-4ea7-b127-8bdfe3fab241",
+        "migrations_dir": "migrations"
+      }
+    ],
+    "vars": {
+      "HOTEL_API_URL": "https://example.invalid",
+      "WISATA_API_URL": "https://example.invalid",
+      "TRANSPORT_API_URL": "https://example.invalid",
+      "BOOKING_ENABLED": "false",
+      "INTEROP_HOLDS": "false",
+      "INTEROP_PREPARE_ENABLED": "false"
+    }
   }
 }
