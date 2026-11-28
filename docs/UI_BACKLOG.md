@@ -43,3 +43,10 @@
 - [KODE] Penampilan status per-provider sekarang hanya memakai item D1 yang sudah lolos pemeriksaan `verifiedBy: D1_JOURNAL`; status reservasi dan pembayaran dipisah. Bila respons tidak memuat field, tampilkan `belum diketahui`.
 - [BELUM TERVERIFIKASI] Masa tahanan `expiresAt`, voucher, serta sinkronisasi `GET hold` per provider belum tersedia langsung pada UI. Jangan tampilkan countdown atau tombol mutasi palsu.
 - [KODE] Handoff yang ada masih prefill-only setelah sanitasi query dan pemeriksaan katalog; jangan membuat tautan handoff baru atau menganggapnya booking. Banner aksi terpisah ditunda karena penghapusan prefill yang aman belum didukung.
+
+## Gate code review PR #23 (2026-11-28)
+
+- [TERVERIFIKASI] Lighthouse rerun `46106992977`: lima rute Accessibility/Best Practices 100/100; Lighthouse failed awal karena browser startup, bukan kegagalan audit aksesibilitas.
+- [TERVERIFIKASI] Guard checkout bekerja dengan atribut `disabled` ketika fixture health `bookingEnabled=false` (browser CI); server tetap otoritas terakhir.
+- [WAJIB MANUAL] Jalankan walkthrough keyboard penuh dan pembaca layar pada Safari/iOS VoiceOver serta Chromium/Windows NVDA, termasuk ChipGroup, Stepper, dialog, date picker, dan penyimpanan token.
+- [WAJIB METRIK] Rekam S-A/S-B/S-C pada baseline `994e649` dan PR terbaru dengan fixture identik, definisi aksi sama, dan langkah lengkap sampai halaman Tinjau. Jangan menurunkan target atau mengekstrapolasi dari tes komponen.

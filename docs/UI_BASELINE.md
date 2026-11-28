@@ -89,3 +89,11 @@ Sumber tahap A: estimasi manual **S-A ~17**, **S-B ~10**, **S-C ~12**; sumber in
 | Satu kontrol per jenis data di semua halaman | Belum | PARSIAL; perlu tinjauan browser |
 
 Pengukuran browser yang konsisten wajib memakai tanggal dan layanan sintetis yang sama; dokumentasikan setiap click/tap/keyboard block. Jangan menyamakan dua estimasi manual dengan dua hasil browser.
+
+## Review gate tambahan — 28 November 2026
+
+Pengulangan Lighthouse pada [UI Evidence run 46106992977](https://github.com/Sapexxx/jogjatrip-itinerary/actions/runs/46106992977) **SUCCESS** di commit `b76a5983`, setelah kegagalan transient Chrome DevTools startup pada percobaan pertama. Pada rerun, kelima rute beranda/paket/pilihan/itinerary/pesanan meraih Accessibility dan Best Practices **100/100**, Performance **84–88**, CLS sekitar **0,004–0,0054**.
+
+Tes CDP tambahan di `ui-evidence.mjs` memeriksa navigasi panah ChipGroup, perpindahan fokus, label ARIA, `type=tel`, dan tombol checkout yang benar-benar disabled pada fixture `bookingEnabled=false`. **Belum berarti pengujian pembaca layar manusia selesai.**
+
+Untuk S-A/S-B/S-C, angka baseline 17/10/12 tetap estimasi manual tanpa jejak aksi dari browser baseline. Tes CDP yang ada menggunakan fixture, tetapi belum menjalankan tiga skenario lengkap secara sepadan pada kedua commit. Karena itu target ≥30% **tetap belum terverifikasi**, meskipun komponen UX baru sudah diuji dalam browser.
