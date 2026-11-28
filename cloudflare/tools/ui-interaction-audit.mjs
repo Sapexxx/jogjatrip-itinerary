@@ -79,7 +79,7 @@ try{
  ['click','[data-page="explore"]'],['click','[data-tab="wisata"]'],['wait','#catalog [data-view]'],['click','#catalog [data-view]'],['wait','#detailDialog[open]'],['field','#mStartTime','11:00'],['field','#mEndTime','12:00'],['click','#addItem']
  ],'(()=>({passed:document.querySelector("#planner.page.active")!==null&&["hotel","wisata"].every(t=>state.cart.some(c=>c.item.type===t)),types:state.cart.map(c=>c.item.type)}))()');
  report.mutations=mutations;report.errors=errors;
-}finally{ws?.close();chrome.kill();server.close();await fs.rm(profile,{recursive:true,force:true})}
+}finally{ws?.close();chrome.kill();server.close();await new Promise(resolve=>{if(chrome.exitCode!==null||chrome.signalCode!==null)return resolve();chrome.once('exit',resolve);setTimeout(resolve,1500)});await fs.rm(profile,{recursive:true,force:true,maxRetries:8,retryDelay:300}).catch(e=>console.error('Chrome profile cleanup warning:',e.message))}
 await fs.mkdir(path.dirname(out),{recursive:true});await fs.writeFile(out,JSON.stringify(report,null,2));
 console.log(JSON.stringify({label,scenarios:report.scenarios.map(s=>({name:s.name,valid:s.valid,actions:s.actions,error:s.error,observed:s.observed})),mutations,errors},null,2));
 if(report.scenarios.some(s=>!s.valid)||mutations||errors.length)process.exitCode=1;
