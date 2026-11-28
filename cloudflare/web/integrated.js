@@ -85,11 +85,11 @@ function integratedTransportSummary(){
 }
 function integratedTransportPreference(){
  const check=ie('v4UseTransport');if(!check)return;
- check.onchange=()=>{
+ check.onchange=async()=>{
   if(check.checked){selectCatalogTab('transport');document.querySelector('#explore .section-top').scrollIntoView({behavior:'smooth',block:'start'});return}
   const existing=planState.activities.filter(a=>a.sourceItem?.type==='transport'),cart=state.cart.filter(c=>c.item.type==='transport');
   if(existing.some(a=>a.orderId)){check.checked=true;toast('Kendaraan yang telah memiliki pesanan tidak dapat dihapus');return}
-  if((existing.length||cart.length)&&!confirm('Hapus pilihan transportasi dari itinerary?')){check.checked=true;return}
+  if((existing.length||cart.length)&&!(await window.JTUXDialog.confirm('Hapus pilihan transportasi dari itinerary?'))){check.checked=true;return}
   state.cart=state.cart.filter(c=>c.item.type!=='transport');state.quote=null;planState.activities=planState.activities.filter(a=>a.sourceItem?.type!=='transport');integrated.quote=null;saveCart();integratedRender();
  };
 }

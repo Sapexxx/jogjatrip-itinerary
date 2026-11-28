@@ -91,7 +91,7 @@ function v4OpenCandidate(p,scroll=true){
  v4El('v4ToPlan').onclick=()=>v4SelectCandidate(p,true);
  if(scroll)box.scrollIntoView({behavior:'smooth',block:'start'});
 }
-function v4SelectCandidate(p,toPlan){
+async function v4SelectCandidate(p,toPlan){
  const start=tripDate(),items=[];
  v4EnsureSlots(p);
  const slots=[...(p.hotel?[p.hotelSlot]:[]),...p.visitSlots];
@@ -99,10 +99,10 @@ function v4SelectCandidate(p,toPlan){
  if(p.hotel){const h=p.hotel.hotel;items.push({item:{type:'hotel',hotelId:String(h.hotelId||h.id),roomId:String(p.hotel.roomInfo.room.roomId||p.hotel.roomInfo.room.id),checkIn:p.hotelSlot.date,checkOut:v4AddDays(p.hotelSlot.date,p.nights),guests:p.travelers,plannedStartTime:p.hotelSlot.startTime,plannedEndTime:p.hotelSlot.endTime},name:h.name,estimate:p.hotel.roomInfo.price*p.nights})}
  p.visits.slice(0,Math.max(0,12-items.length)).forEach((d,i)=>items.push({item:{type:'wisata',destinationId:Number(d.id),visitDate:p.visitSlots[i].date,quantity:p.travelers,tier:'base',plannedStartTime:p.visitSlots[i].startTime,plannedEndTime:p.visitSlots[i].endTime},name:d.name,estimate:Number(d.price||0)*p.travelers}));
  if(!items.length){toast('Tidak ada layanan dari provider yang bisa dipilih');return}
- if(!toPlan){if(state.cart.length&&!confirm('Ganti pilihan layanan di keranjang dengan rekomendasi ini?'))return;state.cart=items;state.quote=null;saveCart();renderCart();}
+ if(!toPlan){if(state.cart.length&&!(await window.JTUXDialog.confirm('Ganti pilihan layanan di keranjang dengan rekomendasi ini?')))return;state.cart=items;state.quote=null;saveCart();renderCart();}
  if(toPlan){
   // Itinerary draft may contain more items than the legacy cart checkout limit.
-  if(planState.id&&!confirm('Buat draft agenda baru? Simpan agenda lama jika dibutuhkan.'))return;
+  if(planState.id&&!(await window.JTUXDialog.confirm('Buat draft agenda baru? Simpan agenda lama jika dibutuhkan.')))return;
   planState.id=null;planState.accessToken=null;planState.activities=[];
   v4El('planTitle').value=p.name;v4El('planStart').value=start;v4El('planEnd').value=v4AddDays(start,p.nights);
   if(p.hotel)planState.activities.push({type:'hotel',title:'Check-in '+p.hotel.hotel.name,date:p.hotelSlot.date,startTime:p.hotelSlot.startTime,endTime:p.hotelSlot.endTime,region:v4HotelRegion(p.hotel.hotel),notes:'Rencana; belum merupakan reservasi',sourceItem:{type:'hotel',hotelId:String(p.hotel.hotel.hotelId||p.hotel.hotel.id),roomId:String(p.hotel.roomInfo.room.roomId||p.hotel.roomInfo.room.id),checkIn:p.hotelSlot.date,checkOut:v4AddDays(p.hotelSlot.date,p.nights),guests:p.travelers,plannedStartTime:p.hotelSlot.startTime,plannedEndTime:p.hotelSlot.endTime}});

@@ -148,20 +148,20 @@ function mount(){
  const panels=new Map();let preparationEnabled=false;
  for(const view of views){
   const anchor=doc.getElementById(view.anchor);if(!anchor)continue;
-  const el=doc.createElement('section');el.className='jt-i5-checkout';el.setAttribute('aria-label','Kesiapan Contract 0.2');
-  const heading=doc.createElement('h3');heading.textContent='Contract 0.2 · Checkout aman';
+  const el=doc.createElement('section');el.className='jt-i5-checkout';el.setAttribute('aria-label','Persiapan perjalanan');
+  const heading=doc.createElement('h3');heading.textContent='Persiapan perjalanan aman';
   const detail=doc.createElement('p');detail.setAttribute('role','status');detail.setAttribute('aria-live','polite');
-  const action=doc.createElement('button');action.type='button';action.className='outlinewide';action.textContent='Siapkan referensi checkout lokal';
-  const note=doc.createElement('small');note.textContent='Tahap I5: hanya menyiapkan identitas transaksi. Tidak membuat booking atau menghubungi provider. Integrasi transaksi belum diaktifkan.';
+  const action=doc.createElement('button');action.type='button';action.className='outlinewide';action.textContent='Simpan referensi rencana';
+  const note=doc.createElement('small');note.textContent='Ini hanya menyimpan referensi rencana. Belum membuat pemesanan atau menghubungi penyedia.';
   // Read-only server journal lookup; credentials are typed, never persisted.
-  const statusForm=doc.createElement('form');statusForm.setAttribute('aria-label','Periksa status checkout Contract 0.2');
-  const idLabel=doc.createElement('label');idLabel.textContent='ID checkout Contract 0.2';
+  const statusForm=doc.createElement('form');statusForm.setAttribute('aria-label','Periksa status referensi pesanan');
+  const idLabel=doc.createElement('label');idLabel.textContent='Nomor referensi pesanan';
   const orderInput=doc.createElement('input');orderInput.type='text';orderInput.name='orderId';orderInput.placeholder='JT-...';orderInput.autocomplete='off';idLabel.append(orderInput);
-  const tokenLabel=doc.createElement('label');tokenLabel.textContent='Token akses checkout (rahasia)';
+  const tokenLabel=doc.createElement('label');tokenLabel.textContent='Kode rahasia pesanan';
   const tokenInput=doc.createElement('input');tokenInput.type='password';tokenInput.name='checkoutToken';tokenInput.autocomplete='off';tokenInput.spellcheck=false;tokenLabel.append(tokenInput);
   const check=doc.createElement('button');check.type='submit';check.className='outlinewide';check.textContent='Periksa status tersimpan (baca saja)';
   const statusOut=doc.createElement('p');statusOut.setAttribute('role','status');statusOut.setAttribute('aria-live','polite');
-  const statusNote=doc.createElement('small');statusNote.textContent='Token hanya dipakai untuk permintaan ini. Tidak disimpan atau dimasukkan ke URL. Endpoint aktif hanya jika Contract 0.2 tersedia di server.';
+  const statusNote=doc.createElement('small');statusNote.textContent='Kode rahasia hanya digunakan untuk pemeriksaan ini, tidak disimpan atau dimasukkan ke URL.';
   statusForm.append(idLabel,tokenLabel,check,statusOut,statusNote);
   statusForm.addEventListener('submit',async e=>{
    e.preventDefault();
@@ -191,19 +191,28 @@ function mount(){
    dataLabel.append(consent,doc.createTextNode(' Saya setuju nama, telepon, dan email digunakan untuk menyiapkan checkout dan diteruskan ke penyedia yang dipilih hanya pada transaksi yang nanti diotorisasi.'));
    const priceLabel=doc.createElement('label'),price=doc.createElement('input');price.type='checkbox';price.checked=false;
    const amount=doc.createElement('span');priceLabel.append(price,amount);
-   const submit=doc.createElement('button');submit.type='button';submit.className='outlinewide';submit.textContent='Siapkan checkout di server (tanpa booking)';
+   const submit=doc.createElement('button');submit.type='button';submit.className='outlinewide';submit.textContent='Simpan persiapan pesanan (tanpa booking)';
    const out=doc.createElement('p');out.setAttribute('role','status');out.setAttribute('aria-live','polite');
-   const help=doc.createElement('small');help.textContent='Persetujuan ini tidak melakukan pembayaran atau CONFIRM. Buat dan simpan token sebelum mengirim checkout. Token tidak dapat dipulihkan dari server.';
-   const makeToken=doc.createElement('button');makeToken.type='button';makeToken.className='outlinewide';makeToken.textContent='Buat token akses checkout';
-   const savedLabel=doc.createElement('label'),saved=doc.createElement('input');saved.type='checkbox';saved.checked=false;savedLabel.append(saved,doc.createTextNode(' Saya sudah menyimpan token akses secara aman.'));
+   const help=doc.createElement('small');help.textContent='Persetujuan ini tidak melakukan pembayaran atau reservasi. Simpan kode rahasia sebelum melanjutkan; kode tidak dapat dipulihkan.';
+   const makeToken=doc.createElement('button');makeToken.type='button';makeToken.className='outlinewide';makeToken.textContent='Buat kode rahasia pesanan';
+   const savedLabel=doc.createElement('label'),saved=doc.createElement('input');saved.type='checkbox';saved.checked=false;savedLabel.append(saved,doc.createTextNode(' Saya sudah menyimpan kode rahasia ini secara aman.'));
    section.append(dataLabel,priceLabel,makeToken,savedLabel,submit,out,help);el.append(heading,detail,action,note,section,statusForm);
    prep={section,consent,price,amount,submit,out,makeToken,saved,token:null,busy:false,signature:null};
    makeToken.addEventListener('click',()=>{if(makeToken.disabled)return;prep.token=manager.createToken();tokenInput.value=prep.token;saved.checked=false;out.textContent='Token tersedia pada kolom status. Salin dan simpan secara aman sebelum melanjutkan.';refresh('plan')});
-   const copyToken=doc.createElement('button');copyToken.type='button';copyToken.className='outlinewide';copyToken.textContent='Salin token akses';
-   copyToken.addEventListener('click',async()=>{if(!/^[a-f0-9]{64}$/.test(tokenInput.value))return;try{await root.navigator.clipboard.writeText(tokenInput.value);statusOut.textContent='Token disalin. Simpan secara aman.'}catch{statusOut.textContent='Salin token secara manual dari kolom token.';tokenInput.select()}});
-   const recover=doc.createElement('button');recover.type='button';recover.className='outlinewide';recover.textContent='Pulihkan ID checkout dari referensi asli (baca saja)';
+   const copyToken=doc.createElement('button');copyToken.type='button';copyToken.className='outlinewide';copyToken.textContent='Salin kode rahasia';
+   copyToken.addEventListener('click',async()=>{if(!/^[a-f0-9]{64}$/.test(tokenInput.value))return;try{await root.navigator.clipboard.writeText(tokenInput.value);statusOut.textContent='Kode disalin. Simpan secara aman.'}catch{statusOut.textContent='Salin token secara manual dari kolom token.';tokenInput.select()}});
+   const downloadToken=doc.createElement('button');downloadToken.type='button';downloadToken.className='outlinewide';downloadToken.textContent='Unduh kode rahasia (.txt)';
+   downloadToken.addEventListener('click',()=>{
+    const value=tokenInput.value.trim();if(!/^[a-f0-9]{64}$/.test(value))return;
+    const blob=new Blob([value+'\n'],{type:'text/plain;charset=utf-8'});
+    const file=root.URL.createObjectURL(blob),link=doc.createElement('a');
+    link.href=file;link.download='kode-rahasia-jogjatrip.txt';link.style.display='none';
+    doc.body.append(link);link.click();link.remove();root.setTimeout(()=>root.URL.revokeObjectURL(file),0);
+    statusOut.textContent='File kode rahasia diunduh. Simpan di tempat yang aman; jangan bagikan kepada orang lain.';
+   });
+   const recover=doc.createElement('button');recover.type='button';recover.className='outlinewide';recover.textContent='Cari kembali nomor pesanan (baca saja)';
    recover.addEventListener('click',async()=>{const input=view.get(),live=root.JTInteropI5Plan?.();if(!input||!live||recover.disabled)return;recover.disabled=true;try{const data=await manager.recoverServer(input.scope,live.planToken,tokenInput.value.trim(),root.fetch.bind(root));orderInput.value=data.orderId;statusOut.textContent='D1 journal: '+data.status+'. ID checkout berhasil dipulihkan. Tidak ada transaksi baru.'}catch{statusOut.textContent='Pemulihan belum terverifikasi. Jangan membuat checkout baru.'}finally{tokenInput.value='';refresh('plan')}});
-   statusForm.append(copyToken,recover);prep.recover=recover;
+   statusForm.append(copyToken,downloadToken,recover);prep.recover=recover;
    saved.addEventListener('change',()=>refresh('plan'));
    const reset=()=>{consent.checked=false;price.checked=false;refresh('plan')};
    for(const id of ['ibName','ibPhone','ibEmail'])doc.getElementById(id)?.addEventListener('input',reset);
