@@ -11,11 +11,15 @@ function jtChooseSchedule({title,date,minDate,maxDate,startTime='',endTime='',in
  return new Promise(resolve=>{
   const modal=document.createElement('dialog');modal.className='jt-schedule-dialog';modal.setAttribute('aria-label','Atur jadwal kegiatan');const priorFocus=document.activeElement;
   const wrap=document.createElement('div');wrap.className='jt-schedule-content';
-  wrap.innerHTML=`<h3>Atur jadwal ${escapeHTML(title)}</h3><p>Jam ini adalah rencana pribadi, bukan jam reservasi yang sudah disetujui penyedia. Sesuaikan dengan jam buka/tutup dan ketentuan tiket.</p><form method="dialog" class="jt-schedule-form"><label>Tanggal kegiatan<input name="date" type="date" required min="${escapeHTML(minDate)}" max="${escapeHTML(maxDate)}" value="${escapeHTML(date)}"></label><label>Mulai<input name="start" type="time" required value="${escapeHTML(startTime)}"></label><label>Selesai<input name="end" type="time" required value="${escapeHTML(endTime)}"></label><p class="jt-schedule-note">${escapeHTML(info||'Jam operasional belum terverifikasi dari API. Periksa ketentuan penyedia sebelum berkunjung.')}</p><div class="jt-schedule-actions"><button type="button" class="secondary" data-cancel>Batal</button><button type="submit" class="dark">Simpan jadwal</button></div><p class="jt-schedule-error" role="alert"></p></form>`;
+  const name=String(title).toLowerCase();
+  const suggestStart=name.includes('check-in')?'14:00':name.includes('pengambilan')?'10:00':'09:00';
+  const suggestEnd=name.includes('check-in')?'15:00':name.includes('pengambilan')?'11:00':'10:00';
+  wrap.innerHTML=`<h3>Atur jadwal ${escapeHTML(title)}</h3><p>Jam contoh hanya untuk agenda pribadi, bukan slot atau jam buka penyedia yang telah dikonfirmasi. Anda dapat memilih sendiri jam lain sebelum menyimpan.</p><form method="dialog" class="jt-schedule-form"><label>Tanggal kegiatan<input name="date" type="date" required min="${escapeHTML(minDate)}" max="${escapeHTML(maxDate)}" value="${escapeHTML(date)}"></label><label>Mulai<input name="start" type="time" required value="${escapeHTML(startTime)}"></label><label>Selesai<input name="end" type="time" required value="${escapeHTML(endTime)}"></label><p class="jt-schedule-note">${escapeHTML(info||'Jam operasional belum terverifikasi dari API. Periksa ketentuan penyedia sebelum berkunjung.')}</p><div class="jt-schedule-actions"><button type="button" class="secondary" data-cancel>Batal</button><button type="button" class="outlinewide" data-suggested-time>Gunakan jam contoh (${escapeHTML(suggestStart)}–${escapeHTML(suggestEnd)}) dan simpan</button><button type="submit" class="dark">Simpan jadwal</button></div><p class="jt-schedule-error" role="alert"></p></form>`;
   modal.append(wrap);document.body.append(modal);
   const form=wrap.querySelector('form');let finished=false;
   const finish=value=>{if(finished)return;finished=true;modal.close();modal.remove();priorFocus?.focus();resolve(value)};
   form.querySelector('[data-cancel]').onclick=()=>finish(null);
+  form.querySelector('[data-suggested-time]').onclick=()=>{form.elements.start.value=suggestStart;form.elements.end.value=suggestEnd;form.requestSubmit()};
   modal.addEventListener('cancel',e=>{e.preventDefault();finish(null)});
   form.onsubmit=e=>{e.preventDefault();const d=form.elements.date.value,st=form.elements.start.value,en=form.elements.end.value;if(!d||!st||!en||en<=st){form.querySelector('.jt-schedule-error').textContent='Pilih tanggal dan pastikan jam selesai lebih besar daripada jam mulai.';return}finish({date:d,startTime:st,endTime:en})};
   modal.showModal();
@@ -51,6 +55,7 @@ function integratedOpenTransport({fromHome=false,startDate,endDate:finish,people
   if(people)ie('ibPeople').value=people;
   else ie('ibPeople').value=guests();
   if(!startDate)ie('ibNights').value=String(nights());
+  window.JTUXControls?.sync('ibPeople');window.JTUXControls?.sync('ibNights');
   integratedResetRental(start,finish||endDate(start,inights()));
  }
  document.querySelector('[data-ib-tab="transport"]')?.click();
@@ -85,11 +90,11 @@ function integratedTransportSummary(){
 }
 function integratedTransportPreference(){
  const check=ie('v4UseTransport');if(!check)return;
- check.onchange=()=>{
+ check.onchange=async()=>{
   if(check.checked){selectCatalogTab('transport');document.querySelector('#explore .section-top').scrollIntoView({behavior:'smooth',block:'start'});return}
   const existing=planState.activities.filter(a=>a.sourceItem?.type==='transport'),cart=state.cart.filter(c=>c.item.type==='transport');
   if(existing.some(a=>a.orderId)){check.checked=true;toast('Kendaraan yang telah memiliki pesanan tidak dapat dihapus');return}
-  if((existing.length||cart.length)&&!confirm('Hapus pilihan transportasi dari itinerary?')){check.checked=true;return}
+  if((existing.length||cart.length)&&!(await window.JTUXDialog.confirm('Hapus pilihan transportasi dari itinerary?'))){check.checked=true;return}
   state.cart=state.cart.filter(c=>c.item.type!=='transport');state.quote=null;planState.activities=planState.activities.filter(a=>a.sourceItem?.type!=='transport');integrated.quote=null;saveCart();integratedRender();
  };
 }

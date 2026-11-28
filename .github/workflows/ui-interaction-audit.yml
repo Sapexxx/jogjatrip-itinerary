@@ -1,0 +1,44 @@
+name: UX V4 paired scenario audit
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'cloudflare/tools/ui-interaction-*.mjs'
+      - '.github/workflows/ui-interaction-audit.yml'
+      - 'cloudflare/web/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  paired-scenarios:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout locked baseline main
+        uses: actions/checkout@v4
+        with:
+          ref: 994e649803fe995d2c724542955dfd8c9c5df176
+          path: baseline
+          persist-credentials: false
+      - name: Checkout candidate commit
+        uses: actions/checkout@v4
+        with:
+          path: candidate
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Measure baseline S-A S-B S-C
+        run: node candidate/cloudflare/tools/ui-interaction-audit.mjs baseline/cloudflare/web interaction-report/baseline.json baseline-994e649
+      - name: Measure PR S-A S-B S-C
+        if: success()
+        run: node candidate/cloudflare/tools/ui-interaction-audit.mjs candidate/cloudflare/web interaction-report/candidate.json candidate-pr23
+      - name: Compare identical tasks
+        if: success()
+        run: node candidate/cloudflare/tools/ui-interaction-compare.mjs interaction-report/baseline.json interaction-report/candidate.json interaction-report
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ux-v4-scenario-evidence
+          path: interaction-report/
+          retention-days: 30

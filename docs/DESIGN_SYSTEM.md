@@ -23,3 +23,18 @@ The next audit exposed a router selector regression and a 0.507 CLS on the itine
 ### Empty-state CLS correction
 
 Commit 26926568 passed 49 tests, 60 browser assertions, all 36 screenshots, and 21 token contrasts. Lighthouse accessibility and best practices reached 100 on all five routes; order lookup CLS was still 0.145 (cart 0.084). Initial history and cart now contain the exact final empty state in static HTML, reserve a minimum block size, and avoid replacing identical DOM content. No change to audit limits or fixture data. Verify on the new head before merge.
+
+
+## UX V4 safe — kontrol dan alur (28 November 2026)
+
+- `cloudflare/web/controls.js`: peningkatan progresif dari input lama; `Stepper` untuk nilai numerik (`ibPeople`, `packageGuests`), `ChipGroup` untuk select kecil (`ibNights`, `nights`, `guests`, `v4Duration`, `v4Budget`, jenis dan sopir sewa). Tidak mengubah `id`, `name`, dan representasi nilai asli.
+- `cloudflare/web/date-utils.js`: `nightsBetween` check-out eksklusif; `inclusiveDays` sewa inklusif; `rentalValid` maksimum 30 hari; perhitungan berdasarkan UTC dari `YYYY-MM-DD` tanpa drift zona waktu.
+- `cloudflare/web/journey-ux.js`: opsi mode perjalanan dan status tahapan berbasis hash route lama, tidak membuka route mutasi.
+- `cloudflare/web/ux-summary.js`: ringkasan hanya memakai quote nyata yang sudah dihasilkan komponen lama; tidak mengklaim stok atau order selesai.
+- `cloudflare/web/ux-dialog.js`: modal konfirmasi aksesibel dengan fokus kembali dan Esc sebagai batal, menggantikan panggilan `confirm()` browser lama.
+- `cloudflare/web/ux-status.js`: label `reservationState` dan `paymentState` terpisah, fallback bila informasi tidak tersedia.
+- `cloudflare/web/interop-checkout.js`: hanya kosakata pengguna dan unduhan .txt kode rahasia dari sesi saat ini. Tidak mengubah fingerprint, key, consent reset, draft lock, recovery, maupun token generation.
+- `cloudflare/tools/check-tokens.mjs`: menolak penambahan hex literal di CSS komponen/halaman; warna berasal dari `tokens.css`.
+- Kontrol yang belum aman untuk diluncurkan tanpa backend dan tes browser (misalnya `maxQuantity`, status live, filter komparatif) dicatat di `docs/UI_BACKLOG.md`. Tidak ada dependensi runtime baru.
+
+Standar: target sentuh 44px, keyboard, `aria-checked` pada pilihan radio, `aria-live` hanya untuk nilai yang benar-benar berubah, `disabled` native, serta konten deklaratif untuk keadaan checkout dinonaktifkan. Validasi manual WCAG masih terpisah dari tes statis.

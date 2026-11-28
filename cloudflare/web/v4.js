@@ -82,16 +82,30 @@ function v4OpenCandidate(p,scroll=true){
  if(!p)return;window.v4Current=p;const box=v4El('v4FeaturedDetail'),schedule=v4Schedule(p),start=tripDate(),last=v4AddDays(start,p.nights);
  box.hidden=false;
  const slotRow=item=>{if(item.kind==='checkout')return `<div class="v4-trip-note">${escapeHTML(item.title)}</div>`;const h=item.kind==='hotel',prefix=h?'hotel':'visit',index=h?0:item.index,slot=item.slot;return `<div class="v4-trip-row"><span class="v4-trip-title">${escapeHTML(item.title)}</span><label aria-label="Tanggal ${escapeHTML(item.title)}"><input type="date" data-v4-date="${prefix}:${index}" value="${escapeHTML(slot.date)}" min="${escapeHTML(start)}" max="${escapeHTML(h?start:last)}" ${h?'readonly':''}></label><label aria-label="Jam mulai"><input type="time" data-v4-start="${prefix}:${index}" value="${escapeHTML(slot.startTime)}"></label><label aria-label="Jam selesai"><input type="time" data-v4-end="${prefix}:${index}" value="${escapeHTML(slot.endTime)}"></label></div>`};
- box.innerHTML=`<span class="section-tag">PRATINJAU PERJALANAN · BELUM BOOKING</span><h3>${escapeHTML(p.name)}</h3><p>${p.nights+1} hari ${p.nights} malam · ${p.travelers} tamu · ${escapeHTML(p.regions.join(' • '))}</p><p>Hotel: ${p.hotel?escapeHTML(p.hotel.hotel.name):'Tidak dipilih'} · ${p.visits.length} destinasi nyata dari API. <strong>Anda menentukan sendiri tanggal dan jam tiap kunjungan.</strong> Kunjungan dapat lebih dari satu per hari. Jam harus disesuaikan dengan jam operasional dan tiket penyedia.</p><div class="v4-days">${schedule.map(d=>`<div class="v4-day"><strong>Hari ${d.index} · ${escapeHTML(d.date)} · ${escapeHTML(d.region)}</strong>${d.items.map(slotRow).join('')||'<p>Waktu bebas — bisa ditambahkan aktivitas.</p>'}</div>`).join('')}</div><p class="v4-trip-note">Waktu kosong belum dijadwalkan. Tidak ada batas pukul 15.00; waktu agenda berbeda dari jam reservasi yang diakui provider. Pengaturan ini tidak menjamin tiket berlaku pada jam pilihan.</p><div class="v4-detail-actions"><button type="button" id="v4ToCart">Sesuaikan & Pesan via Itinerary <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/icons.svg#arrow"></use></svg></button><button type="button" class="secondary" id="v4ToPlan">Buat itinerary dari pilihan ini</button></div><p class="v4-unavailable">Harga, stok, dan kebijakan jam dikonfirmasi oleh Hotel dan Wisata saat quote. Tambahkan transportasi JogjaTrans melalui Itinerary Builder. Estimasi paket ini belum mencakup sewa kendaraan.</p>`;
+ box.innerHTML=`<span class="section-tag">PRATINJAU PERJALANAN · BELUM BOOKING</span><h3>${escapeHTML(p.name)}</h3><p>${p.nights+1} hari ${p.nights} malam · ${p.travelers} tamu · ${escapeHTML(p.regions.join(' • '))}</p><p>Hotel: ${p.hotel?escapeHTML(p.hotel.hotel.name):'Tidak dipilih'} · ${p.visits.length} destinasi nyata dari API. <strong>Anda menentukan sendiri tanggal dan jam tiap kunjungan.</strong> Kunjungan dapat lebih dari satu per hari. Jam harus disesuaikan dengan jam operasional dan tiket penyedia.</p><div class="v4-days">${schedule.map(d=>`<div class="v4-day"><strong>Hari ${d.index} · ${escapeHTML(d.date)} · ${escapeHTML(d.region)}</strong>${d.items.map(slotRow).join('')||'<p>Waktu bebas — bisa ditambahkan aktivitas.</p>'}</div>`).join('')}</div><p class="v4-trip-note">Waktu kosong belum dijadwalkan. Tidak ada batas pukul 15.00; waktu agenda berbeda dari jam reservasi yang diakui provider. Pengaturan ini tidak menjamin tiket berlaku pada jam pilihan.</p><div class="v4-detail-actions"><button type="button" class="outlinewide" id="v4QuickFillTimes">Isi semua jam contoh (belum booking)</button><button type="button" id="v4ToCart">Sesuaikan & Pesan via Itinerary <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/icons.svg#arrow"></use></svg></button><button type="button" class="secondary" id="v4ToPlan">Buat itinerary dari pilihan ini</button></div><p class="v4-unavailable">Harga, stok, dan kebijakan jam dikonfirmasi oleh Hotel dan Wisata saat quote. Tambahkan transportasi JogjaTrans melalui Itinerary Builder. Estimasi paket ini belum mencakup sewa kendaraan.</p>`;
  const updateSlot=(key,value,kind)=>{const [type,n]=key.split(':'),slot=type==='hotel'?p.hotelSlot:p.visitSlots[Number(n)];if(!slot)return;slot[kind]=value};
  box.querySelectorAll('[data-v4-date]').forEach(input=>input.onchange=()=>{updateSlot(input.dataset.v4Date,input.value,'date');v4OpenCandidate(p,false)});
  box.querySelectorAll('[data-v4-start]').forEach(input=>input.onchange=()=>updateSlot(input.dataset.v4Start,input.value,'startTime'));
  box.querySelectorAll('[data-v4-end]').forEach(input=>input.onchange=()=>updateSlot(input.dataset.v4End,input.value,'endTime'));
+ v4El('v4QuickFillTimes').onclick=()=>{
+  // Suggested itinerary slots are traveler-editable; they do not claim provider opening hours.
+  if(p.hotel){p.hotelSlot.startTime='14:00';p.hotelSlot.endTime='15:00'}
+  const countPerDate=new Map();
+  for(const slot of p.visitSlots){
+   const index=countPerDate.get(slot.date)||0;countPerDate.set(slot.date,index+1);
+   const hour=9+Math.min(index,6)*2;
+   slot.startTime=String(hour).padStart(2,'0')+':00';
+   slot.endTime=String(hour+1).padStart(2,'0')+':00';
+  }
+  v4OpenCandidate(p,false);
+  v4El('v4FeaturedDetail').querySelector('#v4ToPlan')?.focus();
+  toast('Jam contoh terisi sebagai rencana pribadi. Periksa dan ubah bila perlu; belum ada booking.');
+ };
  v4El('v4ToCart').onclick=()=>v4SelectCandidate(p,true);
  v4El('v4ToPlan').onclick=()=>v4SelectCandidate(p,true);
  if(scroll)box.scrollIntoView({behavior:'smooth',block:'start'});
 }
-function v4SelectCandidate(p,toPlan){
+async function v4SelectCandidate(p,toPlan){
  const start=tripDate(),items=[];
  v4EnsureSlots(p);
  const slots=[...(p.hotel?[p.hotelSlot]:[]),...p.visitSlots];
@@ -99,10 +113,10 @@ function v4SelectCandidate(p,toPlan){
  if(p.hotel){const h=p.hotel.hotel;items.push({item:{type:'hotel',hotelId:String(h.hotelId||h.id),roomId:String(p.hotel.roomInfo.room.roomId||p.hotel.roomInfo.room.id),checkIn:p.hotelSlot.date,checkOut:v4AddDays(p.hotelSlot.date,p.nights),guests:p.travelers,plannedStartTime:p.hotelSlot.startTime,plannedEndTime:p.hotelSlot.endTime},name:h.name,estimate:p.hotel.roomInfo.price*p.nights})}
  p.visits.slice(0,Math.max(0,12-items.length)).forEach((d,i)=>items.push({item:{type:'wisata',destinationId:Number(d.id),visitDate:p.visitSlots[i].date,quantity:p.travelers,tier:'base',plannedStartTime:p.visitSlots[i].startTime,plannedEndTime:p.visitSlots[i].endTime},name:d.name,estimate:Number(d.price||0)*p.travelers}));
  if(!items.length){toast('Tidak ada layanan dari provider yang bisa dipilih');return}
- if(!toPlan){if(state.cart.length&&!confirm('Ganti pilihan layanan di keranjang dengan rekomendasi ini?'))return;state.cart=items;state.quote=null;saveCart();renderCart();}
+ if(!toPlan){if(state.cart.length&&!(await window.JTUXDialog.confirm('Ganti pilihan layanan di keranjang dengan rekomendasi ini?')))return;state.cart=items;state.quote=null;saveCart();renderCart();}
  if(toPlan){
   // Itinerary draft may contain more items than the legacy cart checkout limit.
-  if(planState.id&&!confirm('Buat draft agenda baru? Simpan agenda lama jika dibutuhkan.'))return;
+  if(planState.id&&!(await window.JTUXDialog.confirm('Buat draft agenda baru? Simpan agenda lama jika dibutuhkan.')))return;
   planState.id=null;planState.accessToken=null;planState.activities=[];
   v4El('planTitle').value=p.name;v4El('planStart').value=start;v4El('planEnd').value=v4AddDays(start,p.nights);
   if(p.hotel)planState.activities.push({type:'hotel',title:'Check-in '+p.hotel.hotel.name,date:p.hotelSlot.date,startTime:p.hotelSlot.startTime,endTime:p.hotelSlot.endTime,region:v4HotelRegion(p.hotel.hotel),notes:'Rencana; belum merupakan reservasi',sourceItem:{type:'hotel',hotelId:String(p.hotel.hotel.hotelId||p.hotel.hotel.id),roomId:String(p.hotel.roomInfo.room.roomId||p.hotel.roomInfo.room.id),checkIn:p.hotelSlot.date,checkOut:v4AddDays(p.hotelSlot.date,p.nights),guests:p.travelers,plannedStartTime:p.hotelSlot.startTime,plannedEndTime:p.hotelSlot.endTime}});
