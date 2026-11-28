@@ -66,3 +66,7 @@ footer{background:white;border-top:1px solid var(--line);padding:30px max(5%,cal
 .ux-stepper-value{width:64px;max-width:72px;border:0;background:var(--white);text-align:center;font:inherit;font-weight:700;appearance:textfield}
 .ux-stepper-value:focus-visible{outline:3px solid var(--green-700);outline-offset:-3px}
 .ux-stepper-value::-webkit-inner-spin-button,.ux-stepper-value::-webkit-outer-spin-button{appearance:none;margin:0}
+
+.ux-fast-note{padding:11px 15px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--paper);color:var(--green-900);line-height:1.55;font-size:.88rem}
+[data-suggested-time],#addItemSuggested,#v4QuickFillTimes{min-height:44px;white-space:normal;text-align:center}
+.jt-schedule-actions{flex-wrap:wrap}
