@@ -117,3 +117,19 @@ Untuk S-A/S-B/S-C, angka baseline 17/10/12 tetap estimasi manual tanpa jejak aks
 **Hasil:** tidak ada pengurangan aksi pada tiga replay identik; target ≥30% S-A **belum terbukti tercapai**. Perbandingan ini terutama membuktikan *functional parity* alur lama. Karena langkah replay sama di kedua versi, tes ini bukan ukuran yang cukup terhadap kemungkinan pengurangan aksi pada kontrol baru. Untuk mengukur efektivitas redesign secara nyata, lakukan sesi tugas dengan pengguna atau uji klik fisik adaptif (memakai visual dan kendali UI terbaru) dan hitung setiap tap/keyboard block, termasuk kalender dan stepper. Angka estimasi awal (~17/~10/~12) bukan pembanding yang setara dengan 14/8/11 dan tidak boleh dicampur.
 
 **Uji aksesibilitas:** skrip browser dan Lighthouse lulus, tetapi verifikasi manual NVDA/VoiceOver **BELUM DIJALANKAN**. Ikuti `docs/UX_V4_MANUAL_A11Y_CHECKLIST.md` dan lampirkan bukti sebelum mengubah status gate.
+
+## Evaluasi optimasi jalur tindakan UX V4 — 28 November 2026
+
+Perbaikan frontend yang diuji: tombol **Gunakan jam contoh dan simpan** pada dialog jadwal Builder, **Isi semua jam contoh** pada kandidat Paket, dan **Gunakan jam contoh & tambahkan** pada dialog Katalog. Semua tindakan merupakan keputusan eksplisit wisatawan atas agenda pribadi, bukan konfirmasi ketersediaan, jam operasional, tiket, kamar, atau booking; waktu dapat diedit ulang.
+
+Bukti [paired browser CI #46109800704](https://github.com/Sapexxx/jogjatrip-itinerary/actions/runs/46109800704), baseline `994e649` versus branch UX commit `705cda0`, fixture H1/R1/D1/V1 read-only:
+
+| Skenario | Aksi baseline | Aksi UX | Pengurangan | Hasil |
+| --- | ---: | ---: | ---: | --- |
+| S-A Builder hotel, wisata, kendaraan | 14 | 8 | **42,9%** | Valid, target 30% tercapai dalam replay |
+| S-B Paket Bundling | 8 | 5 | **37,5%** | Valid |
+| S-C Katalog → Pilihan Saya | 11 | 7 | **36,4%** | Valid |
+
+**Pengendalian:** UI tetap mengharuskan pemilihan layanan secara eksplisit; kode backend, endpoint, consent dan checkout tidak berubah. Browser tidak membuat request mutasi provider. Script pengukuran mengadaptasi klik ketika tersedia tombol jalur cepat, sedangkan baseline menggunakan input waktu manual. Keluaran akhir diuji terhadap identitas layanan, jenis layanan dan jam agenda yang sama untuk kedua versi. Setelah perbaikan ini, comparator juga mengharuskan `observed.items` identik secara struktural agar hitungan dinyatakan sah.
+
+**Batas interpretasi:** perhitungan adalah operasi DOM diskret otomatis, bukan klik/gesture fisik, waktu penyelesaian, atau uji pengguna manusia. Tiga skenario sintetis tidak menyatakan ketersediaan riil provider. Target antarmuka pada ketiga replay terpenuhi; verifikasi usability dan aksesibilitas manual tetap OPEN.

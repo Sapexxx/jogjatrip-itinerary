@@ -57,3 +57,10 @@
 - [TERUJI] `46108439278` menjalankan kedua snapshot `main@994e649` dan PR dengan protokol fixture identik, semuanya mencapai end-state; baseline/PR S-A=14/14, S-B=8/8, S-C=11/11. Tidak ada mutasi provider.
 - [TARGET BELUM TERPENUHI DALAM REPLAY] Reduksi S-A adalah **0%**, bukan 30%. Karena skrip memutar ulang aksi yang sama pada dua snapshot, tes bersifat *functional parity*, bukan uji optimasi interaksi yang memperhitungkan jalur UI baru. Masih diperlukan evaluasi interaksi natural pengguna.
 - [WAJIB MANUAL] NVDA/VoiceOver serta review tampilan dan fokus di perangkat manusia mengikuti `docs/UX_V4_MANUAL_A11Y_CHECKLIST.md`. Status NOT RUN harus tetap sampai bukti tersedia.
+
+## Hasil jalur cepat dan pembatasannya — 28 November 2026
+
+- [TERUKUR, REPLAY] Baseline vs PR dengan output identik: S-A 14→8 (42,9%), S-B 8→5 (37,5%), S-C 11→7 (36,4%). Referensi CI `46109800704`, fixture H1/R1/D1/V1 read-only.
+- [REKOMENDASI] Validasi perilaku jalan cepat pada sesi manusia: tombol saran jam mungkin mempercepat pembuatan rencana tetapi pengguna tetap harus memeriksa jam buka penyedia dan durasi perjalanan yang realistis sebelum memesan.
+- [MANUAL TERBUKA] NVDA/VoiceOver pada tombol cepat, waktu agenda, dialog, fokus setelah memilih; lakukan pemeriksaan pada kondisi jam contoh tidak sesuai kebutuhan pengguna.
+- [TIDAK DIKLAIM] Penghematan waktu manusia, ketersediaan slot provider, atau pengurangan beban kerja booking; hanya pengurangan jumlah operasi replay tertentu.

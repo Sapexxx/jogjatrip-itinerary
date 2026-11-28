@@ -7,9 +7,10 @@ if(base.protocol!==head.protocol||base.fixture!==head.fixture||base.measurement!
 const scenarios=base.scenarios.map(before=>{
  const after=head.scenarios.find(s=>s.name===before.name);
  if(!after)throw Error('Missing scenario '+before.name);
- const valid=before.valid&&after.valid&&Number.isFinite(before.actions)&&before.actions>0&&Number.isFinite(after.actions);
+ const sameOutput=Array.isArray(before.observed?.items)&&Array.isArray(after.observed?.items)&&JSON.stringify(before.observed.items)===JSON.stringify(after.observed.items);
+ const valid=before.valid&&after.valid&&sameOutput&&Number.isFinite(before.actions)&&before.actions>0&&Number.isFinite(after.actions);
  const reduction=valid?Number(((before.actions-after.actions)*100/before.actions).toFixed(1)):null;
- return {name:before.name,valid,before:before.actions,after:after.actions,reductionPct:reduction,baseError:before.error||null,headError:after.error||null};
+ return {name:before.name,valid,before:before.actions,after:after.actions,reductionPct:reduction,sameOutput,baseError:before.error||null,headError:after.error||null};
 });
 const result={protocol:base.protocol,fixture:base.fixture,measurement:base.measurement,scenarios,goalS_A_30percent:scenarios[0].valid?scenarios[0].reductionPct>=30:null,limitations:['Scripted discrete actions are not human click/keyboard timings.','Both snapshots must reach same end-state; invalid outcomes do not count.','No booking mutations.','Manual screen-reader test is separate.']};
 await fs.mkdir(out,{recursive:true});await fs.writeFile(path.join(out,'comparison.json'),JSON.stringify(result,null,2));
