@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-const webRoot=fileURLToPath(new URL('../web/',import.meta.url));
+const webRoot=path.resolve(fileURLToPath(new URL('../web/',import.meta.url)));
 const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.json':'application/json','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon'};
 const fixture={
  hotels:[{hotelId:'H1',name:'Hotel contoh (fixture)',city:'Sleman'}],
