@@ -12,5 +12,5 @@ test('checkout credential presentation does not change its state machine',()=>{
  assert.match(s,/prep\.consent\.checked=false/);
  assert.match(s,/prep\.price\.checked=false/);
  assert.match(s,/!preparationEnabled\|\|prep\.busy/);
- assert.match(get('cloudflare-status.js'),/bookingEnabled!==false/);
+ assert.match(get('cloudflare-status.js'),/bookingEnabled\s*!==\s*false/);
 });

@@ -20,7 +20,8 @@ test('progressive control scripts preserve classic loading order and native valu
  assert.match(html,/value="2" selected>3 hari/);
  assert.match(source,/el\.dispatchEvent\(new Event\('change'/);
  assert.match(source,/stepper\('ibPeople'/);
- assert.match(source,/chips\('ibNights'/);
+ assert.match(source,/['"]ibNights['"]/);
+ assert.match(source,/chips\(id\)/);
  assert.doesNotMatch(source,/import\s+/);
  assert.doesNotMatch(source,/fetch\(|localStorage|sessionStorage|bookingEnabled\s*=/);
 });

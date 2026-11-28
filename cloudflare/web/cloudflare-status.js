@@ -7,7 +7,7 @@
   if(!response.ok){show('Kesiapan checkout belum dapat diverifikasi. Simpan rencana; jangan melakukan booking.');return}
   const health=await response.json();
   window.JTInteropI5Mounted?.setPreparationEnabled(health.interopPreparationEnabled===true);
-  if(health.bookingEnabled!==false){show('Gunakan hanya tindakan yang telah disetujui server dan penyedia.');return}
+  if(health.bookingEnabled !== false){show('Gunakan hanya tindakan yang telah disetujui server dan penyedia.');return}
   show('Checkout belum aktif. Anda tetap bisa menyusun perjalanan, menyimpan rencana, dan memeriksa harga simulasi.');
   document.addEventListener('click',event=>{
    const button=event.target.closest?.('#bookBtn, #ibBook, #packageBookBtn');
