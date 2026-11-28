@@ -50,3 +50,10 @@
 - [TERVERIFIKASI] Guard checkout bekerja dengan atribut `disabled` ketika fixture health `bookingEnabled=false` (browser CI); server tetap otoritas terakhir.
 - [WAJIB MANUAL] Jalankan walkthrough keyboard penuh dan pembaca layar pada Safari/iOS VoiceOver serta Chromium/Windows NVDA, termasuk ChipGroup, Stepper, dialog, date picker, dan penyimpanan token.
 - [WAJIB METRIK] Rekam S-A/S-B/S-C pada baseline `994e649` dan PR terbaru dengan fixture identik, definisi aksi sama, dan langkah lengkap sampai halaman Tinjau. Jangan menurunkan target atau mengekstrapolasi dari tes komponen.
+
+
+## Pengukuran aktual S-A/S-B/S-C (paired replay CI)
+
+- [TERUJI] `46108439278` menjalankan kedua snapshot `main@994e649` dan PR dengan protokol fixture identik, semuanya mencapai end-state; baseline/PR S-A=14/14, S-B=8/8, S-C=11/11. Tidak ada mutasi provider.
+- [TARGET BELUM TERPENUHI DALAM REPLAY] Reduksi S-A adalah **0%**, bukan 30%. Karena skrip memutar ulang aksi yang sama pada dua snapshot, tes bersifat *functional parity*, bukan uji optimasi interaksi yang memperhitungkan jalur UI baru. Masih diperlukan evaluasi interaksi natural pengguna.
+- [WAJIB MANUAL] NVDA/VoiceOver serta review tampilan dan fokus di perangkat manusia mengikuti `docs/UX_V4_MANUAL_A11Y_CHECKLIST.md`. Status NOT RUN harus tetap sampai bukti tersedia.

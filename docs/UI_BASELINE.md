@@ -97,3 +97,23 @@ Pengulangan Lighthouse pada [UI Evidence run 46106992977](https://github.com/Sap
 Tes CDP tambahan di `ui-evidence.mjs` memeriksa navigasi panah ChipGroup, perpindahan fokus, label ARIA, `type=tel`, dan tombol checkout yang benar-benar disabled pada fixture `bookingEnabled=false`. **Belum berarti pengujian pembaca layar manusia selesai.**
 
 Untuk S-A/S-B/S-C, angka baseline 17/10/12 tetap estimasi manual tanpa jejak aksi dari browser baseline. Tes CDP yang ada menggunakan fixture, tetapi belum menjalankan tiga skenario lengkap secara sepadan pada kedua commit. Karena itu target ≥30% **tetap belum terverifikasi**, meskipun komponen UX baru sudah diuji dalam browser.
+
+
+## Bukti pengukuran replay dua commit — 28 November 2026
+
+[Sumber CI dan artefak lengkap](https://github.com/Sapexxx/jogjatrip-itinerary/actions/runs/46108439278) · Protokol `jogjatrip-ux-scenarios-v1`.
+
+- Baseline: `main@994e649803fe995d2c724542955dfd8c9c5df176`.
+- Kandidat: `feat/ux-controls-v4-safe@3593085819d9ddb71f598e69dafd00bfcab83250`.
+- Metode: satu skrip browser `ui-interaction-audit.mjs` terhadap dua checkout berbeda dengan fixture sintetis Hotel H1/kamar R1/Wisata D1/kendaraan V1, tanpa request mutasi. Log berisi urutan tindakan, jumlah tindakan dan end-state tiap skenario.
+- Setiap tindakan diskret `click` atau `field` dihitung satu; kondisi `wait` dan setup tidak dihitung. Operasi programatis pada DOM digunakan sebagai replay aksi sintetis, bukan pengukuran gestur fisik atau sesi pengguna sesungguhnya.
+
+| Skenario | Aksi baseline (browser) | Aksi PR (browser) | Perubahan | Validitas |
+| --- | ---: | ---: | ---: | --- |
+| S-A Builder hotel + wisata + kendaraan sampai keadaan Tinjau | 14 | 14 | 0% | Kedua end-state valid |
+| S-B Kandidat paket hingga itinerary | 8 | 8 | 0% | Kedua end-state valid |
+| S-C Katalog hotel + wisata hingga Pilihan Saya | 11 | 11 | 0% | Kedua end-state valid |
+
+**Hasil:** tidak ada pengurangan aksi pada tiga replay identik; target ≥30% S-A **belum terbukti tercapai**. Perbandingan ini terutama membuktikan *functional parity* alur lama. Karena langkah replay sama di kedua versi, tes ini bukan ukuran yang cukup terhadap kemungkinan pengurangan aksi pada kontrol baru. Untuk mengukur efektivitas redesign secara nyata, lakukan sesi tugas dengan pengguna atau uji klik fisik adaptif (memakai visual dan kendali UI terbaru) dan hitung setiap tap/keyboard block, termasuk kalender dan stepper. Angka estimasi awal (~17/~10/~12) bukan pembanding yang setara dengan 14/8/11 dan tidak boleh dicampur.
+
+**Uji aksesibilitas:** skrip browser dan Lighthouse lulus, tetapi verifikasi manual NVDA/VoiceOver **BELUM DIJALANKAN**. Ikuti `docs/UX_V4_MANUAL_A11Y_CHECKLIST.md` dan lampirkan bukti sebelum mengubah status gate.
