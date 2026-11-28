@@ -49,35 +49,60 @@ try{
   const trace=[];
   try{
    await reset();
-   for(const [type,selector,value] of steps){
-    if(type==='wait'){await until(selector);continue}
+   async function action(type,selector,value){
     let expression;
     if(type==='click')expression='(()=>{const e=document.querySelector('+JSON.stringify(selector)+');if(!e||e.disabled||e.closest("[hidden]"))return false;e.click();return true})()';
     if(type==='field')expression='(()=>{const e=document.querySelector('+JSON.stringify(selector)+');if(!e)return false;e.value='+JSON.stringify(value)+';e.dispatchEvent(new Event("input",{bubbles:true}));e.dispatchEvent(new Event("change",{bubbles:true}));return e.value==='+JSON.stringify(value)+'})()';
-    if(!expression||await evaluate(expression)!==true)throw Error('ACTION_FAILED '+type+' '+selector);
+    if(!expression||await evaluate(expression)!==true)throw Error('ACTION_FAILED '+type+' '+selector+' '+String(value??''));
     trace.push({type,selector,value:value??null});await sleep(100);
+   }
+   for(const [type,selector,value] of steps){
+    if(type==='wait'){await until(selector);continue}
+    if(type==='schedule'){
+     const hours=selector==='hotel'?['14:00','15:00']:selector==='transport'?['10:00','11:00']:['09:00','10:00'];
+     const fast=await evaluate('!!document.querySelector(".jt-schedule-dialog[open] [data-suggested-time]")');
+     if(fast)await action('click','.jt-schedule-dialog [data-suggested-time]');
+     else{await action('field','.jt-schedule-dialog [name="start"]',hours[0]);await action('field','.jt-schedule-dialog [name="end"]',hours[1]);await action('click','.jt-schedule-dialog [type="submit"]')}
+     continue;
+    }
+    if(type==='packageTimes'){
+     const fast=await evaluate('!!document.querySelector("#v4QuickFillTimes")');
+     if(fast)await action('click','#v4QuickFillTimes');
+     else{
+      await action('field','#v4FeaturedDetail [data-v4-start="hotel:0"]','14:00');
+      await action('field','#v4FeaturedDetail [data-v4-end="hotel:0"]','15:00');
+      await action('field','#v4FeaturedDetail [data-v4-start="visit:0"]','09:00');
+      await action('field','#v4FeaturedDetail [data-v4-end="visit:0"]','10:00');
+     }
+     continue;
+    }
+    if(type==='detail'){
+     const fast=await evaluate('!!document.querySelector("#detailDialog[open] #addItemSuggested")');
+     const hours=selector==='hotel'?['14:00','15:00']:['09:00','10:00'];
+     if(fast)await action('click','#addItemSuggested');
+     else{await action('field','#mStartTime',hours[0]);await action('field','#mEndTime',hours[1]);await action('click','#addItem')}
+     continue;
+    }
+    await action(type,selector,value);
    }
    const observed=await evaluate(goal);if(!observed||!observed.passed)throw Error('GOAL_NOT_REACHED '+JSON.stringify(observed));
    report.scenarios.push({name,valid:true,actions:trace.length,trace,observed});
   }catch(e){report.scenarios.push({name,valid:false,actions:null,trace,error:String(e)})}
  }
- const slot=[['field','.jt-schedule-dialog [name="start"]','09:00'],['field','.jt-schedule-dialog [name="end"]','10:00'],['click','.jt-schedule-dialog [type="submit"]']];
  await run('S-A',[
- ['click','[data-page="journey"]'],['wait','#ibHotelOptions [data-ib-hotel]'],['click','#ibHotelOptions [data-ib-hotel]'],['wait','.jt-schedule-dialog[open]'],...slot,
- ['wait','#ibWisataOptions [data-ib-wisata]'],['click','#ibWisataOptions [data-ib-wisata]'],['wait','.jt-schedule-dialog[open]'],...slot,
- ['click','[data-ib-tab="transport"]'],['wait','#ibTransportOptions [data-ib-vehicle]:not([disabled])'],['click','#ibTransportOptions [data-ib-vehicle]:not([disabled])'],['wait','.jt-schedule-dialog[open]'],...slot
- ],'(()=>({passed:document.querySelector("#journey.page.active")!==null&&["hotel","wisata","transport"].every(t=>planState.activities.some(a=>a.sourceItem?.type===t)),types:planState.activities.map(a=>a.sourceItem?.type)}))()');
+ ['click','[data-page="journey"]'],['wait','#ibHotelOptions [data-ib-hotel]'],['click','#ibHotelOptions [data-ib-hotel]'],['wait','.jt-schedule-dialog[open]'],['schedule','hotel'],
+ ['wait','#ibWisataOptions [data-ib-wisata]'],['click','#ibWisataOptions [data-ib-wisata]'],['wait','.jt-schedule-dialog[open]'],['schedule','wisata'],
+ ['click','[data-ib-tab="transport"]'],['wait','#ibTransportOptions [data-ib-vehicle]:not([disabled])'],['click','#ibTransportOptions [data-ib-vehicle]:not([disabled])'],['wait','.jt-schedule-dialog[open]'],['schedule','transport']
+ ],'(()=>({passed:document.querySelector("#journey.page.active")!==null&&["hotel","wisata","transport"].every(t=>planState.activities.some(a=>a.sourceItem?.type===t))&&planState.activities.every(a=>{const t=a.sourceItem?.type;const times=t==="hotel"?["14:00","15:00"]:t==="transport"?["10:00","11:00"]:["09:00","10:00"];return a.startTime===times[0]&&a.endTime===times[1]}),items:planState.activities.map(a=>({type:a.sourceItem?.type,start:a.startTime,end:a.endTime,id:a.sourceItem?.hotelId||a.sourceItem?.destinationId||a.sourceItem?.vehicleId}))}))()');
  await run('S-B',[
  ['click','[data-page="packages"]'],['wait','#allSmartPackages [data-v4-package]'],['click','[data-v4-theme="Alam"]'],['wait','#allSmartPackages [data-v4-package]'],
  ['click','#allSmartPackages [data-v4-package]'],['wait','#v4FeaturedDetail:not([hidden]) [data-v4-start]'],
- ['field','#v4FeaturedDetail [data-v4-start="hotel:0"]','09:00'],['field','#v4FeaturedDetail [data-v4-end="hotel:0"]','10:00'],
- ['field','#v4FeaturedDetail [data-v4-start="visit:0"]','11:00'],['field','#v4FeaturedDetail [data-v4-end="visit:0"]','12:00'],
- ['click','#v4ToPlan']
- ],'(()=>({passed:document.querySelector("#journey.page.active")!==null&&planState.activities.some(a=>a.sourceItem?.type==="hotel")&&planState.activities.some(a=>a.sourceItem?.type==="wisata"),types:planState.activities.map(a=>a.sourceItem?.type)}))()');
+ ['packageTimes'],['click','#v4ToPlan']
+ ],'(()=>({passed:document.querySelector("#journey.page.active")!==null&&planState.activities.length===2&&planState.activities.some(a=>a.sourceItem?.type==="hotel"&&a.startTime==="14:00"&&a.endTime==="15:00")&&planState.activities.some(a=>a.sourceItem?.type==="wisata"&&a.startTime==="09:00"&&a.endTime==="10:00"),items:planState.activities.map(a=>({type:a.sourceItem?.type,start:a.startTime,end:a.endTime,id:a.sourceItem?.hotelId||a.sourceItem?.destinationId}))}))()');
  await run('S-C',[
- ['click','[data-tab="hotel"]'],['wait','#catalog [data-view]'],['click','#catalog [data-view]'],['wait','#detailDialog[open]'],['field','#mStartTime','09:00'],['field','#mEndTime','10:00'],['click','#addItem'],['wait','#planner.page.active'],
- ['click','[data-page="explore"]'],['click','[data-tab="wisata"]'],['wait','#catalog [data-view]'],['click','#catalog [data-view]'],['wait','#detailDialog[open]'],['field','#mStartTime','11:00'],['field','#mEndTime','12:00'],['click','#addItem']
- ],'(()=>({passed:document.querySelector("#planner.page.active")!==null&&["hotel","wisata"].every(t=>state.cart.some(c=>c.item.type===t)),types:state.cart.map(c=>c.item.type)}))()');
+ ['click','[data-tab="hotel"]'],['wait','#catalog [data-view]'],['click','#catalog [data-view]'],['wait','#detailDialog[open]'],['detail','hotel'],['wait','#planner.page.active'],
+ ['click','[data-page="explore"]'],['click','[data-tab="wisata"]'],['wait','#catalog [data-view]'],['click','#catalog [data-view]'],['wait','#detailDialog[open]'],['detail','wisata']
+ ],'(()=>({passed:document.querySelector("#planner.page.active")!==null&&state.cart.length===2&&state.cart.some(c=>c.item.type==="hotel"&&c.item.plannedStartTime==="14:00"&&c.item.plannedEndTime==="15:00")&&state.cart.some(c=>c.item.type==="wisata"&&c.item.plannedStartTime==="09:00"&&c.item.plannedEndTime==="10:00"),items:state.cart.map(c=>({type:c.item.type,start:c.item.plannedStartTime,end:c.item.plannedEndTime,id:c.item.hotelId||c.item.destinationId}))}))()');
  report.mutations=mutations;report.errors=errors;
 }finally{ws?.close();chrome.kill();server.close();await new Promise(resolve=>{if(chrome.exitCode!==null||chrome.signalCode!==null)return resolve();chrome.once('exit',resolve);setTimeout(resolve,1500)});await fs.rm(profile,{recursive:true,force:true,maxRetries:8,retryDelay:300}).catch(e=>console.error('Chrome profile cleanup warning:',e.message))}
 await fs.mkdir(path.dirname(out),{recursive:true});await fs.writeFile(out,JSON.stringify(report,null,2));
