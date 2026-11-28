@@ -76,4 +76,4 @@ Kontrol progresif:
 - `guests` dan dropdown kecil lain: `ChipGroup` tanpa memanipulasi nilai provider.
 - `customerPhone`/`packagePhone`/`ibPhone`: `type=tel`, `inputmode=tel`, `autocomplete=tel`.
 
-Event: user memilih nilai baru pada komponen -> elemen lama menerima `input` dan `change`. Sinkronisasi dari kode lama ke komponen baru hanya terjamin bila kode lama menembakkan event tersebut; perubahan `.value` tanpa event adalah batas yang masih harus diuji pada handoff/prefill.
+Event: user memilih nilai baru pada komponen -> elemen lama menerima `input` dan `change`. Sinkronisasi nilai prefill dari kode lama memakai `window.JTUXControls.sync(id)` tanpa membuat event `change` palsu. Hook ditambahkan pada `integratedOpenTransport` dan `jtApplyPartnerHandoff`; penambahan handoff baru tetap tidak dilakukan.

@@ -147,6 +147,7 @@ function jtApplyPartnerHandoff(){
  page('explore');selectCatalogTab('transport');
  if(p.withDriver!==undefined){
   $('#exploreRentDriver').value=String(p.withDriver);
+   window.JTUXControls?.sync('exploreRentDriver');
   if(p.withDriver&&$('#exploreRentType').value==='motor'){$('#exploreRentType').value='mobil';$('#exploreRentCategory').value='all'}
  }
  if(p.date&&p.endDate){$('#exploreRentStart').value=p.date;$('#exploreRentEnd').value=p.endDate;}

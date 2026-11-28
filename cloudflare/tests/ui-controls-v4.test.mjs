@@ -25,3 +25,10 @@ test('progressive control scripts preserve classic loading order and native valu
  assert.doesNotMatch(source,/import\s+/);
  assert.doesNotMatch(source,/fetch\(|localStorage|sessionStorage|bookingEnabled\s*=/);
 });
+
+test('legacy prefill calls explicit display sync for enhanced controls',()=>{
+ const integrated=readFileSync(new URL('integrated.js',root),'utf8'),app=readFileSync(new URL('app.js',root),'utf8');
+ assert.match(integrated,/JTUXControls\?\.sync\('ibPeople'\)/);
+ assert.match(integrated,/JTUXControls\?\.sync\('ibNights'\)/);
+ assert.match(app,/JTUXControls\?\.sync\('exploreRentDriver'\)/);
+});

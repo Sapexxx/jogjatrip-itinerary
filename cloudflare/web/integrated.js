@@ -51,6 +51,7 @@ function integratedOpenTransport({fromHome=false,startDate,endDate:finish,people
   if(people)ie('ibPeople').value=people;
   else ie('ibPeople').value=guests();
   if(!startDate)ie('ibNights').value=String(nights());
+  window.JTUXControls?.sync('ibPeople');window.JTUXControls?.sync('ibNights');
   integratedResetRental(start,finish||endDate(start,inights()));
  }
  document.querySelector('[data-ib-tab="transport"]')?.click();

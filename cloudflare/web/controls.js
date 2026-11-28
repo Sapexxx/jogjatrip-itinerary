@@ -84,7 +84,8 @@ function init(){
  messageForDates({start:'exploreRentStart',end:'exploreRentEnd',mode:'rental'});
  messageForDates({start:'tripDate',mode:'trip'});
 }
-const api=Object.freeze({stepper,chips,contact,messageForDates,init});
+function sync(id){const el=root.document?.getElementById(id);const record=el&&instances.get(el);if(!record)return false;record.sync();return true}
+const api=Object.freeze({stepper,chips,contact,messageForDates,sync,init});
 root.JTUXControls=api;
 if(root.document){if(root.document.readyState==='loading')root.document.addEventListener('DOMContentLoaded',init,{once:true});else init();}
 })(typeof window==='undefined'?globalThis:window);
