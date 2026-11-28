@@ -29,3 +29,10 @@
 - [REKOMENDASI] Jalur checkout satu layanan, pemilihan add-on, dan status per-provider hanya ditampilkan bila ada data kanonik yang mendukung.
 - [BELUM TERVERIFIKASI] URL handoff ke aplikasi provider, pengukuran interaksi browser S-A/S-B/S-C, verifikasi manual keyboard/screen reader, serta staging/lighthouse terbaru.
 - [KEAMANAN] I5 token, consent reset, draft-lock dan guard `BOOKING_ENABLED` adalah invariant; UX hanya boleh memperbaiki presentasi.
+
+
+## Tahap D — kendala yang membutuhkan data provider atau tes browser
+
+- [BELUM TERVERIFIKASI] Filter chip katalog, pembanding tiga penawaran, dan tombol tambah satu ketukan perlu data lapangan dan uji end-to-end agar tidak mengubah hasil/quote. Tidak diaktifkan dalam revisi aman ini.
+- [KODE] Ringkasan baru `ux-summary.js` hanya membaca `JTInteropI5Plan` / `JTInteropI5Cart` dan tidak menyimpulkan status stok, pembayaran, atau reservasi.
+- [METRIK] Penurunan 30% S-A/S-B/S-C belum terbukti karena pengukuran browser interaksi yang setara belum dilakukan. Jangan mengklaim pencapaian metrik ini.
