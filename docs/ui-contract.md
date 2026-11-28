@@ -59,3 +59,7 @@ Preserve existing IDs, data attributes, selectors, API paths, storage keys, esca
 ## Phase 4 timeline
 
 Existing `#ibDays`, day navigation, `data-ib-edit`, `#ibSelected`, booking and quote IDs are preserved. `#ibTripMeta`, `#ibEstimate`, `#ibTicket`, `#ibManual`, `#ibAnalyze`, `#ibCopy`, `#ibPrint`, `data-ib-move`, `data-ib-order`, `data-ib-travel` and `data-ib-add-day` are frontend-only. Return/check-out cards are projections, never additional booking items. Reordering preserves clock values; move-day changes provider dates only for unbooked items. Optional travel minutes use the existing notes field; no new API schema or secret storage. Estimates use available catalog prices only, and exclude already-booked services; final quote remains provider-owned. Public hash is navigation only.
+
+
+## Lampiran UX V4-safe, Tahap A
+Elemen di `index.html` tetap menjadi sumber nilai asli bagi script lama. Komponen enhanced tidak boleh menghapus/merename `id`, `name`, atau `data-*` yang telah dipakai. `integrated.js` dimuat sebagai classic `defer` script. Untuk durasi `ibNights` dan `nights`, hanya gunakan nilai opsi sebenarnya (1, 2, 4, 6). Untuk jumlah wisatawan `ibPeople`, batas lokal 1–20 bukan `maxQuantity` provider.

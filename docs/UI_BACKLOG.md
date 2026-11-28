@@ -19,3 +19,13 @@
 - Dark mode is optional and deferred; no incomplete dark palette is shipped.
 - Existing repository JPGs remain because high-resolution licensed landscape assets are not supplied. Do not upscale, invent or download photos. Replace with owner-provided WebP/AVIF and JPG fallback once available; hero >=1600x900, six package photos >=1200x800. Preload current hero and keep intrinsic dimensions; image conversion/quality verification remains pending.
 - Manual visual review, full keyboard/WCAG walkthrough, and real provider quote/booking/sync remain distinct from fixture CI. Production checkout disabled. S6 Wisata capabilities remains outside this frontend scope.
+
+## Audit UX V4-safe — Tahap A (28 November 2026)
+
+- [KODE] Provider `requiredCustomerFields`, `maxQuantity`, `durableStorage`, dan `capabilities` saat ini tidak langsung tersedia di UI; jangan memalsukan kapasitas, readiness, atau schema respons. Perubahan endpoint di luar scope UX.
+- [KODE] `ibNights` hanya memiliki opsi 1, 2, 4, 6. Gunakan ChipGroup dari pilihan terpasang, bukan Stepper +1.
+- [KODE] `ibPeople` min 1 maks 20; `guests` pilihan 1–4. Setiap perubahan kontrol harus mempertahankan value, `input`/`change`, serta invalidasi quote dan consent.
+- [KONTRAK] `quantity` adalah unit/tiket penyedia. Jumlah wisatawan UI tidak otomatis sama dengan jumlah unit kamar atau kendaraan; perlu validasi sumber pilihan per penyedia.
+- [REKOMENDASI] Jalur checkout satu layanan, pemilihan add-on, dan status per-provider hanya ditampilkan bila ada data kanonik yang mendukung.
+- [BELUM TERVERIFIKASI] URL handoff ke aplikasi provider, pengukuran interaksi browser S-A/S-B/S-C, verifikasi manual keyboard/screen reader, serta staging/lighthouse terbaru.
+- [KEAMANAN] I5 token, consent reset, draft-lock dan guard `BOOKING_ENABLED` adalah invariant; UX hanya boleh memperbaiki presentasi.
