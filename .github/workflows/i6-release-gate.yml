@@ -1,0 +1,47 @@
+name: I6 production release authorization gate
+
+on:
+  pull_request:
+    branches: [cloudflare-deploy]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-evidence:
+    name: I6 NO-GO until authenticated staging evidence approved
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Checkout candidate source
+        uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Canonical contract source hash verification (no network)
+        run: node tools/check-source-manifest.mjs
+      - name: Enforce booking disabled before explicit release authorization
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const config=JSON.parse(fs.readFileSync('cloudflare/wrangler.jsonc','utf8'));
+          assert.equal(config.vars.BOOKING_ENABLED,'false');
+          console.log('Booking remains disabled for all builds by default');
+          JS
+      - name: I6 staging evidence and operator/payment sign-off (fail closed)
+        working-directory: cloudflare
+        run: node tools/check-i6-release-evidence.mjs
+      - name: Document release decision
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## I6 production release authorization'
+            echo ''
+            echo '- The release gate remains NO-GO if any required provider staging evidence is absent.'
+            echo '- A passing local or preview test does not prove live E8/E9, remote W2, or provider authorization.'
+            echo '- Target cloudflare-deploy is an automatic **production** deployment trigger. Do not merge without separate explicit production authorization.'
+            echo '- See cloudflare/docs/I6_RELEASE_GATE_2026-11-28.md.'
+          } >> "$GITHUB_STEP_SUMMARY"
