@@ -28,3 +28,15 @@ footer{background:white;border-top:1px solid var(--line);padding:30px max(5%,cal
 .jt-i5-checkout small{line-height:1.55}
 .jt-i5-checkout button{max-width:100%;min-height:42px}
 .jt-i5-checkout button:disabled{opacity:.55;cursor:not-allowed}
+
+/* UX V4 controls retain all source IDs and use existing semantic tokens. */
+.ux-original-hidden{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip-path:inset(50%)!important;white-space:nowrap!important;border:0!important}
+.ux-stepper{display:inline-flex;align-items:center;gap:0;border:1px solid var(--line);border-radius:var(--r-md);background:var(--white);overflow:hidden;max-width:100%}
+.ux-stepper-btn{min-width:44px;min-height:44px;border:0;background:var(--white);color:var(--green-700);cursor:pointer;font:inherit;font-weight:800}
+.ux-stepper-btn:disabled{opacity:.45;cursor:not-allowed}
+.ux-stepper-value{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:0 8px;color:var(--ink);font-weight:700}
+.ux-chip-group{display:flex;flex-wrap:wrap;gap:7px;margin:7px 0}
+.ux-chip{min-height:44px;min-width:44px;padding:9px 12px;border:1px solid var(--line);background:var(--white);color:var(--green-900);border-radius:var(--r-md);cursor:pointer;font:inherit;font-weight:700}
+.ux-chip[aria-checked="true"]{border-color:var(--green-700);background:var(--green-100)}
+.ux-chip:focus-visible,.ux-stepper-btn:focus-visible{outline:3px solid var(--green-700);outline-offset:2px}
+.ux-date-hint{display:block;color:var(--muted);font-size:var(--fs-xs);line-height:1.6;margin-top:5px}
