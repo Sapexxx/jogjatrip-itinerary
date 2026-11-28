@@ -36,3 +36,10 @@
 - [BELUM TERVERIFIKASI] Filter chip katalog, pembanding tiga penawaran, dan tombol tambah satu ketukan perlu data lapangan dan uji end-to-end agar tidak mengubah hasil/quote. Tidak diaktifkan dalam revisi aman ini.
 - [KODE] Ringkasan baru `ux-summary.js` hanya membaca `JTInteropI5Plan` / `JTInteropI5Cart` dan tidak menyimpulkan status stok, pembayaran, atau reservasi.
 - [METRIK] Penurunan 30% S-A/S-B/S-C belum terbukti karena pengukuran browser interaksi yang setara belum dilakukan. Jangan mengklaim pencapaian metrik ini.
+
+
+## Tahap F — status/handoff yang belum tersedia melalui API UI
+
+- [KODE] Penampilan status per-provider sekarang hanya memakai item D1 yang sudah lolos pemeriksaan `verifiedBy: D1_JOURNAL`; status reservasi dan pembayaran dipisah. Bila respons tidak memuat field, tampilkan `belum diketahui`.
+- [BELUM TERVERIFIKASI] Masa tahanan `expiresAt`, voucher, serta sinkronisasi `GET hold` per provider belum tersedia langsung pada UI. Jangan tampilkan countdown atau tombol mutasi palsu.
+- [KODE] Handoff yang ada masih prefill-only setelah sanitasi query dan pemeriksaan katalog; jangan membuat tautan handoff baru atau menganggapnya booking. Banner aksi terpisah ditunda karena penghapusan prefill yang aman belum didukung.
